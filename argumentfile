@@ -1,0 +1,5 @@
+# --timestampoutputs
+--outputdir output
+--loglevel TRACE
+--flattenkeywords TAG:flatten
+--variablefile variables_dev.yaml

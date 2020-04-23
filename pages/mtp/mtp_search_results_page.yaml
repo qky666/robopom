@@ -1,0 +1,9 @@
+# name: mtp_search_results_page
+children:
+  - locator: div#beans-content
+    # name: search_results
+    always_visible: true
+    children:
+      - locator_generator: .//*[contains(text(),'{}')]
+        # name: result_text_generator
+        short: result_text_generator

@@ -1,0 +1,5 @@
+# name: test_component
+children:
+- name: body
+  locator: .//body
+  always_visible: true
