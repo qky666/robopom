@@ -4,15 +4,30 @@ import os
 import yaml
 import anytree.importer
 import robopom.model as model
+import robopom.constants as constants
 
 T = typing.TypeVar('T', bound='model.PageComponent')
 
 
 class ComponentLoader:
+    """
+    Class that compiles several static methods (functions) used to load Components from a file.
+    """
 
     @staticmethod
     def load_component_from_file(file: os.PathLike = None,
                                  component_path: str = None, ) -> typing.Optional[model.PageComponent]:
+        """
+        Loads a ``Component`` from a file (and returns it).
+
+        If ``file`` is ``None``, it returns ``None``. If ``file`` is provided but ``component_path`` is ``None``,
+        it returns the ``root component`` defined in ``file``.
+
+        :param file: The file to read the component definition from. If file is None, it returns None.
+        :param component_path: The (optional) path inside the file of the component to import. If component_path
+                               is None, it return the root component in file.
+        :return: The component obtained, or None if file was None.
+        """
         if file is None or not os.path.isfile(file):
             return None
 
@@ -23,6 +38,18 @@ class ComponentLoader:
     @staticmethod
     def load_generic_component_from_file(file: os.PathLike = None,
                                          component_path: str = None, ) -> typing.Optional[model.GenericComponent]:
+        """
+        Loads a ``GenericComponent`` from a file (and returns it).
+
+        If ``file`` is ``None``, it returns ``None``. If ``file`` is provided but ``component_path`` is ``None``,
+        it returns the ``root generic component`` defined in ``file``.
+
+        :param file: The file to read the generic component definition from. If file is None, it returns None.
+        :param component_path: The (optional) path inside the file of the generic component to import.
+                               If component_path is None, it return the root generic component in file.
+        :return: The generic component obtained, or None if file was None.
+        """
+
         data_dict = ComponentLoader._get_data_from_file(file, component_path)
         if data_dict is None:
             return None
@@ -44,19 +71,38 @@ class ComponentLoader:
 
     @staticmethod
     def _get_path_parts(component_path: str = None) -> typing.List[str]:
-        # Determine path parts.
+        """
+        It returns the list of ``path parts`` in ``component_path``.
+
+        Removes possible ``separator`` at the beginning or ending of ``component_path``.
+
+        :param component_path: The component path.
+        :return: List of path parts.
+        """
         path_parts = []
         if component_path is not None:
-            while component_path.startswith(model.Component.separator):
-                component_path = component_path[len(model.Component.separator):]
-            while component_path.endswith(model.Component.separator):
-                component_path = component_path[:-len(model.Component.separator)]
-            path_parts = component_path.split(model.Component.separator)
+            sep = constants.SEPARATOR
+            while component_path.startswith(sep):
+                component_path = component_path[len(sep):]
+            while component_path.endswith(sep):
+                component_path = component_path[:-len(sep)]
+            path_parts = component_path.split(sep)
         return path_parts
 
     @staticmethod
     def _get_data_from_file(file: os.PathLike = None,
                             component_path: str = None, ) -> typing.Optional[dict]:
+        """
+        Reads data (as a ``dictionary``) from ``file`` (a ``yaml`` file) and returns it.
+
+        If ``file`` is ``None``, it returns ``None``. If ``file`` is provided but ``component_path`` is ``None``,
+        it returns the ``root dictionary`` defined in ``file``.
+
+        :param file: The file to read the dictionary from. If file is None, it returns None.
+        :param component_path: The (optional) path inside the file of the dictionary to import.
+                               If component_path is None, it return the root dictionary in file.
+        :return: The dictionary obtained, or None if file was None.
+        """
         if file is None:
             return None
 

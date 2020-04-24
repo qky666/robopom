@@ -13,6 +13,34 @@ class ComponentVariables:
     @staticmethod
     def get_variables(pages_files: typing.Union[os.PathLike, typing.List[os.PathLike]] = constants.PAGES_FILE,
                       model_files: typing.Union[os.PathLike, typing.List[os.PathLike]] = None) -> dict:
+        """
+        Returns a ``dictionary`` obtained from the ``pages_files`` and ``model_files`` provided.
+
+        Dictionary key-value format is one of:
+
+        - Key: ``[PAGE_NAME]__[PAGE_COMPONENT__PATH]``. Value: ``path:[page_name]__[page_component__path]``.
+          It can have ``separators`` (``__``) in ``page_component__path``.
+          The ``page_component__path`` is formed with the names (``name`` property) of the components
+          in the page component path joined with a ``separator`` (``__``).
+          If any of the page component ancestors (or the page component itself) has no explicit ``name`` attribute,
+          it does not generate a key-value pair.
+
+        - ``[PAGE_NAME]__[PAGE_COMPONENT_SHORT]``.  Value: ``path:[page_name]__[page_component_short]``.
+          It can not have ``separators`` (``__``) in ``page_component_short``.
+          If the page component has no explicit ``short`` attribute, it does not generate a key-value pair.
+
+        *Note*: ``Key`` is upper-cased because it is usually used to define global Robot Framework variables.
+
+        All ``pages_files`` and ``model_files`` provided are used to generate the dictionary.
+
+        :param pages_files: List of pages files (Robot Framework resources files) used to generate the dictionary.
+                            If a single object is given, it is used as a list with that single object.
+                            Default value: 'robopom_pages.resource'
+        :param model_files: List of model files (yaml files) used to generate the dictionary.
+                            If a single object is given, it is used as a list with that single object.
+                            Default value: None.
+        :return: The dictionary obtained.
+        """
         if model_files is None:
             model_files = []
         if isinstance(model_files, str):

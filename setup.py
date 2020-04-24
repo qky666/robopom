@@ -1,13 +1,16 @@
 import setuptools
 
-with open("README.md", "r") as fh:
-    long_description = fh.read()
+
+def read_file(filepath):
+    with open(filepath) as f:
+        return f.read()
+
 
 setuptools.setup(
     name='robopom',
-    version='0.1.0',
+    version=read_file("VERSION"),
     description='Page Object Model for Robot Framework',
-    long_description=long_description,
+    long_description=read_file("README.md"),
     long_description_content_type="text/markdown",
     author='José Torrecilla Álvarez',
     author_email='jose.torrecilla@gmail.com',
@@ -29,12 +32,7 @@ setuptools.setup(
     package_data={'robopom.resources': ['*'],
                   'robopom.resources.template_files': ['*'], },
     include_package_data=True,
-    install_requires=['robotframework==3.1.2',
-                      'robotframework-seleniumlibrary==4.3.0',
-                      'anytree==2.8.0',
-                      'pyyaml==5.3.1',
-                      'robotframework-lint==1.0',
-                      'click==7.1.1', ],
+    install_requires=read_file('requirements.txt').splitlines(),
     entry_points={
         'console_scripts': ['robopom=robopom.cli.robopom:robopom_entry']
     },

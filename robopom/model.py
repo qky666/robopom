@@ -9,10 +9,16 @@ import robopom.RobopomSeleniumPlugin as robopom_selenium_plugin
 import robopom.constants as constants
 import robopom.component_loader as component_loader
 
-# T = typing.TypeVar('T', bound='Component')
+T = typing.TypeVar('T', bound='Component')
 
 
 class Component(anytree.Node):
+    """
+    Generic ``node`` used in the POM (Page Object Model) tree.
+
+    Every object in the POM tree is a ``Component`` instance (or a ``Component`` subclass instance).
+    It defines common basic behaviour for a POM tree nodes.
+    """
     separator = constants.SEPARATOR
 
     def __init__(self,
@@ -20,6 +26,14 @@ class Component(anytree.Node):
                  parent: Component = None,
                  children: typing.Iterable[PageComponent] = None,
                  **kwargs) -> None:
+        """
+        Creates a new ``Component``.
+
+        :param name: Name of the new Component. If None, a unique name (based on object id) is used.
+        :param parent: Parent node of the new Component.
+        :param children: Children of the new Component.
+        :param kwargs: Additional attributes of the new Component.
+        """
         if name is None:
             name = str(id(self))
         super().__init__(name=name, parent=parent, children=children, **kwargs)
@@ -27,6 +41,11 @@ class Component(anytree.Node):
 
     @property
     def auto_named(self) -> bool:
+        """
+        Returns ``True`` if the component was not given an explicit name, ``False`` otherwise.
+
+        :return: ``True`` if the component was not given an explicit name, ``False`` otherwise.
+        """
         try:
             if int(self.name) == id(self):
                 return True
@@ -36,6 +55,11 @@ class Component(anytree.Node):
 
     @property
     def has_ancestor_auto_named(self) -> bool:
+        """
+        Returns ``True`` if the component has any auto-named ancestor, ``False`` otherwise.
+
+        :return: ``True`` if the component has any auto-named ancestor, ``False`` otherwise.
+        """
         if self.parent is None:
             return False
         parent: Component = self.parent
@@ -45,6 +69,15 @@ class Component(anytree.Node):
 
     @property
     def absolute_path(self) -> str:
+        """
+        Returns the ``absolute path`` of the component.
+
+        The format is: ``__ancestor1_name__ancestor2_name__component_name``.
+        In the POM tree, it will be something like this:
+        ``__root__page_name__page_ancestor1_name__page_ancestor2_name__component_name``.
+
+        :return: The absolute path of the component.
+        """
         if self.is_root:
             path = f"{self.separator}{self.name}"
         else:
@@ -56,10 +89,22 @@ class Component(anytree.Node):
 
     @property
     def built_in(self) -> robot_built_in.BuiltIn:
+        """
+        A Robot Framework ``Built In`` object.
+
+        It is used to run ``Built In`` keywords from ``Python`` code.
+
+        :return: A Robot Framework Built In object.
+        """
         return robot_built_in.BuiltIn()
 
     @property
     def selenium_library(self) -> typing.Optional[SeleniumLibrary.SeleniumLibrary]:
+        """
+        The Robot Framework ``SeleniumLibrary`` instance if Robot is running, None if Robot is not runnning.
+
+        :return: The Robot Framework ``SeleniumLibrary`` instance if Robot is running, None if Robot is not runnning.
+        """
         try:
             return self.built_in.get_library_instance(constants.SELENIUM_LIBRARY_NAME)
         except robot_built_in.RobotNotRunningError:
@@ -71,17 +116,51 @@ class Component(anytree.Node):
 
     @property
     def robopom_plugin(self) -> typing.Optional[robopom_selenium_plugin.RobopomSeleniumPlugin]:
+        """
+        The Robot Framework ``RobopomSeleniumPlugin`` instance.
+
+        If Robot is running, it is obtained from ``SeleniumLibrary``.
+        Otherwise, a new instance is created and stored (and this instance used from that moment).
+
+        :return: The Robot Framework ``RobopomSeleniumPlugin`` instance.
+        """
         if self.selenium_library is None:
             if getattr(self, "_robopom_plugin", None) is None:
                 self._robopom_plugin = robopom_selenium_plugin.RobopomSeleniumPlugin()
             return self._robopom_plugin
         return getattr(self.selenium_library, "robopom_plugin", None)
 
-    def add_child(self, child: Component):
+    def add_child(self, child: T) -> T:
+        """
+        Adds a child component.
+
+        :param child: The child component to add.
+        :return: The same received child.
+        """
         child.parent = self
         return child
 
     def variables_dictionary(self, prev_dict: typing.Dict[str, str] = None) -> typing.Dict[str, str]:
+        """
+        Generates a dictionary from the component.
+
+        Dictionary key-value format is one of:
+
+        - Key: ``[PAGE_NAME]__[PAGE_COMPONENT__PATH]``. Value: ``path:[page_name]__[page_component__path]``.
+          It can have ``separators`` (``__``) in ``page_component__path``.
+          The ``page_component__path`` is formed with the names (``name`` property) of the components
+          in the page component path joined with a ``separator`` (``__``).
+          If any of the page component ancestors (or the page component itself) has no explicit ``name`` attribute,
+          it does not generate a key-value pair.
+
+        - ``[PAGE_NAME]__[PAGE_COMPONENT_SHORT]``.  Value: ``path:[page_name]__[page_component_short]``.
+          It can not have ``separators`` (``__``) in ``page_component_short``.
+          If the page component has no explicit ``short`` attribute, it does not generate a key-value pair.
+
+        :param prev_dict: The previous dictionary. It is used internally to manage recursion.
+                          The key-value pairs are added to the prev_dict if provided.
+        :return: The obtained dictionary.
+        """
         if prev_dict is None:
             prev_dict = {}
 
@@ -111,21 +190,46 @@ class Component(anytree.Node):
 
 
 class RootComponent(Component):
+    """
+    Component used as POM tree root node.
+
+    """
     def __init__(self,
                  name: str = None,
                  children: typing.Iterable[PageObject] = None,
                  **kwargs) -> None:
+        """
+        Creates a new ``RootComponent``.
+
+        :param name: Name of the new RootComponent. If None, "root" is used.
+        :param children: Children of the new RootComponent.
+        :param kwargs: Additional attributes of the new RootComponent.
+        """
         if name is None:
             name = constants.ROOT_NAME
         super().__init__(name=name, parent=None, children=children, **kwargs)
 
 
 class PageComponent(Component):
+    """
+    ``Generic Component`` used in a Page.
+
+    It defines common behaviour for ``PageObject`` (an object that represents a page itself) and ``PageElement``
+    and similar objects (objects that represents page elements inside an html page).
+    """
     def __init__(self,
                  name: str = None,
                  parent: AnyParent = None,
                  children: typing.Iterable[AnyPageElement] = None,
                  **kwargs, ) -> None:
+        """
+        Creates a new ``PageComponent``.
+
+        :param name: Name of the new PageComponent. If None, a unique name (based on object id) is used.
+        :param parent: Parent node of the new PageComponent.
+        :param children: Children of the new PageComponent.
+        :param kwargs: Additional attributes of the new PageComponent.
+        """
         super().__init__(name=name, parent=parent, children=children, **kwargs)
 
     def wait_until_loaded(self, timeout=None) -> None:

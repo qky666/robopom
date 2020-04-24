@@ -1,9 +1,10 @@
 # General
 SEPARATOR = "__"  # You can use model.Component.separator
-# CORE_PREFIX = "Core"
+# TODO: If SeleniumLibrary is used with a custom name, there will be problems...
 SELENIUM_LIBRARY_NAME = "SeleniumLibrary"
 PATH_PREFIX = "path"
 ROOT_NAME = "root"
+# CORE_PREFIX = "Core"  # This constant is "implicitly used" only. Leave it here as a reminder.
 OVERRIDE_PREFIX = "Override"
 YAML_EXT = [".yaml", ".yml"]
 

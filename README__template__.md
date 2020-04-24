@@ -1,2 +1,2 @@
 # robopom
-Page Object Model for Robot Framework
+Page Object Model for Robot Framework.
