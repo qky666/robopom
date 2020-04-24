@@ -330,8 +330,9 @@ class RobopomSeleniumPlugin(SeleniumLibrary.base.LibraryComponent):
         in get/set operations. If not provided, Robopom tries to guess it ('text' is used as default if can not guess).
         Possible values: `text`, `select`, `checkbox`, `password`.
 
-        `prefer_visible` (boolean or True-False-string): Optional. If `locator` returns more than one element,
-        the first 'visible' element is used. Default value: `True`.
+        `prefer_visible` (boolean or True-False-string): Optional. If `prefer_visible` is `True`
+        and `locator` returns more than one element, the first 'visible' element is used.
+        If `False`, the first element is used (visible or not). Default value: `True`.
         """
         if isinstance(always_visible, str):
             if always_visible.casefold() == "True".casefold():
@@ -447,7 +448,7 @@ class RobopomSeleniumPlugin(SeleniumLibrary.base.LibraryComponent):
         ('text' is used as default if can not guess).
         Possible values: `text`, `select`, `checkbox`, `password`.
 
-        `prefer_visible` (boolean or True-False-string): Optional. It will be the default `order`
+        `prefer_visible` (boolean or True-False-string): Optional. It will be the default `prefer_visible`
         of the page elements generated from this generator. Default value: `True`.
         """
         if isinstance(always_visible, str):
@@ -524,8 +525,10 @@ class RobopomSeleniumPlugin(SeleniumLibrary.base.LibraryComponent):
         Robopom tries to guess it ('text' is used as default if can not guess).
         Possible values: `text`, `select`, `checkbox`, `password`.
 
-        `prefer_visible` (boolean or True-False-string): Optional. If generated `locator` returns more than one element,
-        the first 'visible' element is used. Default value: Value of the `prefer_visible` property of `generator`.
+        `prefer_visible` (boolean or True-False-string): Optional. If `prefer_visible` is `True`
+        and `locator` returns more than one element, the first 'visible' element is used.
+        If `False`, the first element is used (visible or not).
+        Default value: Value of the `prefer_visible` property of `generator`.
         """
         if isinstance(generator, str):
             generator = self.get_component(generator)

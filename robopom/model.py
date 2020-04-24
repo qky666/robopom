@@ -233,6 +233,17 @@ class PageComponent(Component):
         super().__init__(name=name, parent=parent, children=children, **kwargs)
 
     def wait_until_loaded(self, timeout=None) -> None:
+        """
+        Stops execution until all page components marked as ``always_visible`` (this and all of it's descendants)
+        are visible.
+
+        If ``timeout`` is reached and not all page components marked as ``always_visible`` are visible, an exception
+        is raised.
+
+        :param timeout: If timeout is reached and not all page components marked as always_visible are visible,
+                        an exception is raised. If timeout is None, the SeleniumLibrary default timeout is used.
+        :return: None.
+        """
         self._wait_until_loaded(timeout, force=True)
 
     def _wait_until_loaded(self, timeout=None, force: bool = False) -> None:
@@ -246,6 +257,15 @@ class PageComponent(Component):
 
     @property
     def real_html_parent(self) -> typing.Union[None, PageElement, str]:
+        """
+        Returns the ``real html`` parent of this PageComponent.
+
+        If ``html_parent`` attribute is not None, then ``html_parent`` is returned.
+        If ``html_parent`` is ``None`` and ``parent`` is a ``PageElement``, ``parent`` attribute is returned.
+        Otherwise ``None`` is returned.
+
+        :return: The 'real html parent' os this PageComponent.
+        """
         html_parent = getattr(self, "html_parent", None)
         if html_parent is not None:
             return html_parent
@@ -255,6 +275,14 @@ class PageComponent(Component):
 
     @property
     def page(self) -> PageObject:
+        """
+        The ``PageObject`` this ``PageComponent`` belongs to.
+
+        It returns the ``PageObject`` that is an ancestor of this ``PageComponent``
+        (or ``self``, if it is a ``PageObject`` itself).
+
+        :return: The ``PageObject`` this ``PageComponent`` belongs to.
+        """
         if isinstance(self, PageObject):
             return self
         else:
@@ -262,14 +290,40 @@ class PageComponent(Component):
 
 
 class PageObject(PageComponent):
+    """
+    Object that represents an individual html page.
+
+    It can have any number of children (``PageElement`` and the like objects) that are included in the page.
+    These children can have, in turn, more children. All these objects form the POM (Page Object Model) tree
+    for this page.
+
+    All pages (``PageObject`` instances) have the same parent, called the ``root component``.
+    This root component is "artificially" included to have an unique POM tree.
+    """
     def __init__(self,
                  name: str,
                  parent: RootComponent = None,
                  children: typing.Iterable[AnyPageElement] = None, ) -> None:
+        """
+        Creates a new ``PageObject``.
+
+        In ``PageObject`` instances, ``parent`` is usually the ``root component``, or ``None``
+        (if for some reason the ``PageObject`` is not yet attached to the POM tree)
+
+        :param name: Name of the new PageObject.
+        :param parent: Parent node of the new PageObject. Usually the 'root component', or None.
+        :param children: Children of the new PageObject.
+        """
         super().__init__(name=name, parent=parent, children=children)
 
 
 class PageElement(PageComponent):
+    """
+    Class that represents a single html object (``WebElement`` in ``SeleniumLibrary`` language).
+
+    The most basic kind of descendant that a PageObject can have.
+    A ``PageElement`` can have, in turn, more children.
+    """
 
     def __init__(self,
                  locator: str,
@@ -283,6 +337,25 @@ class PageElement(PageComponent):
                  children: typing.Iterable[AnyPageElement] = None,
                  default_role: str = None,
                  prefer_visible: bool = True, ):
+        """
+        Creates a new ``PageElement``.
+
+        :param locator: SeleniumLibrary locator used to identify the element in the page.
+        :param name: Name of the new PageElement. If None, a unique name (based on object id) is used.
+        :param parent: Parent node of the new PageElement.
+        :param short: A 'shortcut' name used to identify an element in the page.
+        :param always_visible: Establishes if the new PageElement should always be visible in the page.
+        :param html_parent: The 'html parent' of the new PageElement, if it is different from 'parent'
+                            (which is used as the 'real_html_parent' if 'html_parent' is None).
+        :param order: If 'locator' returns more than one element, this determine which to use (zero-based).
+        :param children: Children of the new PageElement.
+        :param default_role: Establishes the default role of the new PageElement that is used in get/set operations.
+                             If not provided, Robopom tries to guess it ('text' is used as default if can not guess).
+                             Possible values: `text`, `select`, `checkbox`, `password`.
+        :param prefer_visible: If 'prefer_visible' is 'True' and 'locator' returns more than one element,
+                               the first 'visible' element is used. If 'False', the first element is used
+                               (visible or not). Default value: 'True'.
+        """
         super().__init__(name=name,
                          locator=locator,
                          parent=parent,
@@ -301,6 +374,19 @@ class PageElement(PageComponent):
         self.prefer_visible = prefer_visible
 
     def find_element(self, required: bool = True) -> typing.Optional[SeleniumLibrary.locators.elementfinder.WebElement]:
+        """
+        Returns the first ``WebElement`` (in ``SeleniumLibrary`` language) found using the ``locator`` attribute.
+
+        If ``prefer_visible`` attribute is ``True``, it returns the first 'visible' element.
+        If none is visible, or if ``prefer_visible`` is ``False``, the first element is returned (visible or not).
+
+        If no element is found, an exception is raised if ``required`` is ``True``.
+        If ``required`` is ``False`` and no element is found, None is returned.
+
+        :param required: If required is True and no element is found, an exception is raised.
+                         If required is False and no element is found, None is returned.
+        :return: The WebElement found (or None if no element is found and required is False).
+        """
         assert self.robopom_plugin is not None, \
             f"find_element: self.robopom_plugin should not be None"
         # locator transformation: If strategy not explicitly set,
@@ -345,6 +431,12 @@ class PageElement(PageComponent):
 
     @property
     def status(self) -> PageElementStatus:
+        """
+        Returns a ``PageElementStatus`` instance with the status info of the ``PageElement``
+        (``present``, ``visible``, ``enabled``, ``selected``).
+
+        :return: The PageElementStatus info of the PageElement.
+        """
         element = self.find_element(required=False)
         if element is None:
             return PageElementStatus(present=False)
@@ -355,19 +447,46 @@ class PageElement(PageComponent):
                                      selected=element.is_selected(), )
 
     def is_present(self) -> bool:
+        """
+        Returns if this ``PageElement`` is present in current page.
+
+        :return: True if this PageElement is present in page, False otherwise.
+        """
         return self.status.present
 
     def is_visible(self) -> bool:
+        """
+        Returns if this ``PageElement`` is visible in current page.
+
+        :return: True if this PageElement is visible in page, False otherwise.
+        """
         return self.status.visible
 
     def is_enabled(self) -> bool:
+        """
+        Returns if this ``PageElement`` is enabled in current page.
+
+        :return: True if this PageElement is enabled in page, False otherwise.
+        """
         return self.status.enabled
 
     def is_selected(self) -> bool:
+        """
+        Returns if this ``PageElement`` is selected in current page.
+
+        :return: True if this PageElement is selected in page, False otherwise.
+        """
         return self.status.selected
 
     @property
     def page_path(self) -> str:
+        """
+        The ``path`` of this ``PageElement`` in the page.
+
+        Format is: ``page_name__page_ancestor1_name__page_ancestor2_name__self_name``
+
+        :return: The path of this PageElement in the page.
+        """
         if isinstance(self.parent, PageObject):
             return self.name
         else:
@@ -375,10 +494,23 @@ class PageElement(PageComponent):
     
     @property
     def path_locator(self) -> str:
+        """
+        The ``absolute_path`` of the ``PageElement`` preceded by ``path:``.
+
+        It is used to find the element in the page using a custom ``Location Strategy`` of ``SeleniumLibrary``.
+        See the ``Add Location Strategy`` keyword.
+
+        :return: The absolute_path of the PageElement preceded by 'path:'.
+        """
         return f"{constants.PATH_PREFIX}:{self.absolute_path}"
 
     @property
     def tag_name(self) -> typing.Optional[str]:
+        """
+        The ``tag name`` of the found ``WebElement``. ``None`` if no element is found.
+
+        :return: The tag name of the found WebElement. None if no element is found.
+        """
         element = self.find_element(False)
         if element is None:
             return None
@@ -386,6 +518,12 @@ class PageElement(PageComponent):
             return element.tag_name
 
     def get_attribute(self, name: str) -> typing.Optional[str]:
+        """
+        The value of the attribute ``name`` of the found ``WebElement``. ``None`` if no element is found.
+
+        :param name: The name of the attribute.
+        :return: The value of the attribute. None if no element is found.
+        """
         element = self.find_element(False)
         if element is None:
             return None
@@ -393,6 +531,15 @@ class PageElement(PageComponent):
             return element.get_attribute(name)
 
     def wait_until_visible(self, timeout=None) -> None:
+        """
+        Stops execution until this PageElement is visible in current page.
+
+        If ``timeout`` is reached and this element is not visible, an exception is raised.
+
+        :param timeout: If timeout is reached and this element is not visible, an exception is raised.
+        If timeout is None, the SeleniumLibrary default timeout is used.
+        :return: None.
+        """
         assert self.robopom_plugin is not None, \
             f"wait_until_visible: self.robopom_plugin should not be None"
         SeleniumLibrary.WaitingKeywords(self.selenium_library).wait_until_element_is_visible(
@@ -403,22 +550,40 @@ class PageElement(PageComponent):
 
 
 class PageElementStatus:
+    """
+    Class that represents the ``status`` of a ``PageElement`` (``present``, ``visible``, ``enabled``, ``selected``).
+    """
     def __init__(self,
                  present: typing.Optional[bool] = None,
                  visible: typing.Optional[bool] = None,
                  enabled: typing.Optional[bool] = None,
                  selected: typing.Optional[bool] = None, ) -> None:
+        """
+        Creates a new ``PageElementStatus``.
+
+        If some of the parameters are not provided, it applies some restrictions
+        (an element that is not present can not be visible, for example).
+
+        :param present: If element is present in the page.
+        :param visible: If element is visible in the page.
+        :param enabled: If element is enabled in the page.
+        :param selected: If element is selected in the page.
+        """
         self.present = present
         self.visible = visible
         self.enabled = enabled
         self.selected = selected
         # Apply restrictions
-        if self.visible or self.enabled or self.selected:
-            self.present = True
+        if self.present is None:
+            if self.visible or self.enabled or self.selected:
+                self.present = True
         if self.present is False:
-            self.visible = False
-            self.enabled = False
-            self.selected = False
+            if self.visible is None:
+                self.visible = False
+            if self.enabled is None:
+                self.enabled = False
+            if self.selected is None:
+                self.selected = False
 
 
 class PageElements(PageComponent):

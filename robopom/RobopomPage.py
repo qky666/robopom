@@ -295,8 +295,9 @@ class RobopomPage:
         ('text' is used as default if can not guess).
         Possible values: `text`, `select`, `checkbox`, `password`.
 
-        `prefer_visible` (boolean or True-False-like-string): Optional. If generated `locator` returns
-        more than one element, the first 'visible' element is used. Default value: Value of the `prefer_visible`
+        `prefer_visible` (boolean or True-False-string): Optional. If `prefer_visible` is `True`
+        and `locator` returns more than one element, the first 'visible' element is used.
+        If `False`, the first element is used (visible or not). Default value: Value of the `prefer_visible`
         property of the generator in `generator_path`.
         """
         if isinstance(format_args, str):
