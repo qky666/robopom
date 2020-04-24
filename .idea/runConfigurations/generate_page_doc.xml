@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="generate_page_doc" type="PythonConfigurationType" factoryName="Python" folderName="Doc">
+  <configuration default="false" name="generate_page_doc" type="PythonConfigurationType" factoryName="Python" folderName="doc">
     <module name="robopom" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
