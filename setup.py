@@ -6,7 +6,7 @@ setuptools.setup(
     description='robopom package',
     author='José Torrecilla Álvarez',
     author_email='jose.torrecilla@mtp.es',
-    license='MIT',
+    license='Apache 2.0',
     url="https://github.com/qky666/robopom",
     packages=setuptools.find_packages(),
     package_data={'robopom.resources': ['*'],
