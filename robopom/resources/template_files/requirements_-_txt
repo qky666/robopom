@@ -1,2 +1,1 @@
-# robopom==0.1.0
-git+https://github.com/qky666/robopom.git#egg=robopom
+robopom==0.1.0

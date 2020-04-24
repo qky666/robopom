@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="variables_update" type="PythonConfigurationType" factoryName="Python" folderName="Run">
+  <configuration default="false" name="variables_update" type="PythonConfigurationType" factoryName="Python" folderName="run">
     <module name="robopom" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
