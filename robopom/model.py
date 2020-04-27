@@ -30,8 +30,8 @@ class Component(anytree.Node):
         Creates a new ``Component``.
 
         :param name: Name of the new Component. If None, a unique name (based on object id) is used.
-        :param parent: Parent node of the new Component.
-        :param children: Children of the new Component.
+        :param parent: Parent node of the new Component. Default value: 'None'.
+        :param children: Children of the new Component. Default value: 'None'.
         :param kwargs: Additional attributes of the new Component.
         """
         if name is None:
@@ -202,7 +202,7 @@ class RootComponent(Component):
         Creates a new ``RootComponent``.
 
         :param name: Name of the new RootComponent. If None, "root" is used.
-        :param children: Children of the new RootComponent.
+        :param children: Children of the new RootComponent. Default value: 'None'.
         :param kwargs: Additional attributes of the new RootComponent.
         """
         if name is None:
@@ -226,8 +226,8 @@ class PageComponent(Component):
         Creates a new ``PageComponent``.
 
         :param name: Name of the new PageComponent. If None, a unique name (based on object id) is used.
-        :param parent: Parent node of the new PageComponent.
-        :param children: Children of the new PageComponent.
+        :param parent: Parent node of the new PageComponent. Default value: 'None'.
+        :param children: Children of the new PageComponent. Default value: 'None'.
         :param kwargs: Additional attributes of the new PageComponent.
         """
         super().__init__(name=name, parent=parent, children=children, **kwargs)
@@ -312,7 +312,7 @@ class PageObject(PageComponent):
 
         :param name: Name of the new PageObject.
         :param parent: Parent node of the new PageObject. Usually the 'root component', or None.
-        :param children: Children of the new PageObject.
+        :param children: Children of the new PageObject. Default value: 'None'.
         """
         super().__init__(name=name, parent=parent, children=children)
 
@@ -342,13 +342,16 @@ class PageElement(PageComponent):
 
         :param locator: SeleniumLibrary locator used to identify the element in the page.
         :param name: Name of the new PageElement. If None, a unique name (based on object id) is used.
-        :param parent: Parent node of the new PageElement.
-        :param short: A 'shortcut' name used to identify an element in the page.
+        :param parent: Parent node of the new PageElement. Default value: 'None'.
+        :param short: A 'shortcut' name used to identify an element in the page. Default value: 'None'.
         :param always_visible: Establishes if the new PageElement should always be visible in the page.
+                               Default value: 'False'.
         :param html_parent: The 'html parent' of the new PageElement, if it is different from 'parent'
-                            (which is used as the 'real_html_parent' if 'html_parent' is None).
+                            ('parent' is used as the 'real_html_parent' if 'html_parent' is None).
+                            Default value: 'None.'
         :param order: If 'locator' returns more than one element, this determine which to use (zero-based).
-        :param children: Children of the new PageElement.
+                      Default value: 'None.'
+        :param children: Children of the new PageElement. Default value: 'None.'
         :param default_role: Establishes the default role of the new PageElement that is used in get/set operations.
                              If not provided, Robopom tries to guess it ('text' is used as default if can not guess).
                              Possible values: `text`, `select`, `checkbox`, `password`.
@@ -532,7 +535,7 @@ class PageElement(PageComponent):
 
     def wait_until_visible(self, timeout=None) -> None:
         """
-        Stops execution until this PageElement is visible in current page.
+        Stops execution until this ``PageElement`` is visible in current page.
 
         If ``timeout`` is reached and this element is not visible, an exception is raised.
 
@@ -564,10 +567,10 @@ class PageElementStatus:
         If some of the parameters are not provided, it applies some restrictions
         (an element that is not present can not be visible, for example).
 
-        :param present: If element is present in the page.
-        :param visible: If element is visible in the page.
-        :param enabled: If element is enabled in the page.
-        :param selected: If element is selected in the page.
+        :param present: If element is present in the page. Default value: 'None'.
+        :param visible: If element is visible in the page. Default value: 'None'.
+        :param enabled: If element is enabled in the page. Default value: 'None'.
+        :param selected: If element is selected in the page. Default value: 'None'.
         """
         self.present = present
         self.visible = visible
@@ -587,7 +590,11 @@ class PageElementStatus:
 
 
 class PageElements(PageComponent):
+    """
+    Class that represents a ``multiple`` html object. It is a ``locator`` that can return more than one ``WebElement``.
 
+    This kind of ``PageComponent`` should not have any children.
+    """
     def __init__(
             self,
             locator: str,
@@ -599,6 +606,25 @@ class PageElements(PageComponent):
             html_parent: typing.Union[str, PageElement] = None,
             default_role: str = None,
     ) -> None:
+        """
+        Creates a new ``PageElements`` object.
+
+        :param locator: SeleniumLibrary locator used to identify the 'PageElements' in the page.
+        :param name: Name of the new 'PageElements'. If None, a unique name (based on object id) is used.
+        :param parent: Parent node of the new 'PageElements'.
+                       This will be the 'parent' of the PageElement objects found using this PageElements object.
+                       Default value: 'None'.
+        :param short: A 'shortcut' name used to identify an element in the page. Default value: 'None'.
+        :param always_visible: Establishes if al least one WebElement defined by this object
+                               should always be visible in the page. Default value: 'False'.
+        :param html_parent: The 'html parent' of the new PageElement, if it is different from 'parent'
+                            ('parent' is used as the 'real_html_parent' if 'html_parent' is None).
+                            Default value: 'None'.
+        :param default_role: Establishes the default role of the WebElements defined by this object
+                             that is used in get/set operations.
+                             If not provided, Robopom tries to guess it ('text' is used as default if can not guess).
+                             Possible values: `text`, `select`, `checkbox`, `password`.
+        """
 
         super().__init__(name=name,
                          locator=locator,
@@ -614,6 +640,11 @@ class PageElements(PageComponent):
         self._previous_page_elements: typing.List[PageElement] = []
 
     def find_elements(self) -> typing.List[SeleniumLibrary.locators.elementfinder.WebElement]:
+        """
+        Returns the list of ``WebElements`` (in ``SeleniumLibrary`` language) found using the ``locator`` attribute.
+
+        :return: List of WebElements found (can be an empty list).
+        """
         assert self.robopom_plugin is not None, \
             f"find_element: self.robopom_plugin should not be None"
         # locator transformation: If strategy not explicitly set,
@@ -648,6 +679,15 @@ class PageElements(PageComponent):
 
     @property
     def page_elements(self) -> typing.List[PageElement]:
+        """
+        List of ``PageElement`` objects found using this ``PageElements`` object.
+
+        The names of the generated ``PageElement`` objects have the following format: ``[page_elements_name]_[order]``
+        where ``page_elements_name`` is the name of this object, and ``order`` is the index (zero based) in the list.
+        The same format applies to ``short`` (if it is not ``None``).
+
+        :return: List of PageElement objects found. Can be an empty list.
+        """
         # Remove from pom previous page elements:
         for e in self._previous_page_elements:
             e.parent = None
@@ -672,6 +712,15 @@ class PageElements(PageComponent):
         return page_elements
 
     def wait_until_visible(self, timeout=None) -> None:
+        """
+        Stops execution until at least one ``WebElement`` found using this object is visible in current page.
+
+        If ``timeout`` is reached and no element is visible, an exception is raised.
+
+        :param timeout: If timeout is reached and no element is visible, an exception is raised.
+        If timeout is None, the SeleniumLibrary default timeout is used.
+        :return: None.
+        """
         assert self.robopom_plugin is not None, \
             f"PageElements.wait_until_visible: self.robopom_plugin should not be None"
         pe = PageElement(
@@ -686,6 +735,14 @@ class PageElements(PageComponent):
 
 
 class PageElementGenerator(PageComponent):
+    """
+    Class that represents a single html object (``WebElement`` in ``SeleniumLibrary`` language) ``generator``.
+
+    It is like a ``PageElement``, but its locator (or any of its ancestors locators) has at least one python
+    ``replacement field`` (like ``{}``).
+
+    It is used to generate ``PageElement`` objects that for some reason require one or more "parameters".
+    """
 
     def __init__(self,
                  locator_generator: str,
@@ -698,6 +755,37 @@ class PageElementGenerator(PageComponent):
                  order: int = None,
                  default_role: str = None,
                  prefer_visible: bool = True, ):
+        """
+        Creates a new ``PageElementGenerator`` object.
+
+        :param locator_generator: SeleniumLibrary locator used to identify the element in the page.
+                                  It can contain python "replacement fields" (like "{}").
+        :param name: Name of the new PageElementGenerator. If None, a unique name (based on object id) is used.
+        :param parent: Parent node of the new PageElementGenerator. This will be the 'parent' of the PageElement objects
+                       generated using this PageElementGenerator object. Default value: 'None'.
+        :param short: A 'shortcut' name used to identify an element in the page. This will be the 'shortcut' of the
+                      PageElement objects generated using this PageElementGenerator object. Default value: 'None'.
+        :param always_visible: Establishes if the new PageElement should always be visible in the page.
+                               This will be the 'always_visible' of the PageElement objects generated using this
+                               PageElementGenerator object. Default value: 'False'.
+        :param html_parent: The 'html parent' of the new PageElement, if it is different from 'parent'
+                            ('parent' is used as the 'real_html_parent' if 'html_parent' is None).
+                            This will be the 'html_parent' of the PageElement objects generated using this
+                            PageElementGenerator object. Default value: 'None'.
+        :param order: If 'locator' returns more than one element, this determine which to use (zero-based).
+                      This will be the 'order' of the PageElement objects generated using this
+                      PageElementGenerator object. Default value: 'None'.
+        :param default_role: Establishes the default role of the PageElement that is used in get/set operations.
+                             If not provided, Robopom tries to guess it ('text' is used as default if can not guess).
+                             Possible values: `text`, `select`, `checkbox`, `password`.
+                             This will be the 'order' of the PageElement objects generated using this
+                             PageElementGenerator object.
+        :param prefer_visible: If 'prefer_visible' is 'True' and 'locator' returns more than one element,
+                               the first 'visible' element is used. If 'False', the first element is used
+                               (visible or not).
+                               This will be the 'prefer_visible' of the PageElement objects generated using this
+                               PageElementGenerator object. Default value: 'True'.
+        """
         super().__init__(name=name,
                          locator_generator=locator_generator,
                          parent=parent,
@@ -724,6 +812,39 @@ class PageElementGenerator(PageComponent):
                         order: typing.Optional[int] = None,
                         default_role: str = None,
                         prefer_visible: bool = None, ) -> PageElementGenerator:
+        """
+        Returns a new ``PageElementGenerator`` that is a ``self``'s child.
+
+        When PageElementGeneratorInstance objects are generated from this new PageElementGenerator,
+        substitutions are made in both ``locator_generator`` (self's one, and the new created object's one).
+
+        :param name: Name of the new PageElementGenerator. If None, a unique name (based on object id) is used.
+        :param locator_generator: SeleniumLibrary locator used to identify the element in the page.
+                                  It can contain python "replacement fields" (like "{}").
+        :param short: A 'shortcut' name used to identify an element in the page. This will be the 'shortcut' of the
+                      PageElement objects generated using this PageElementGenerator object. Default value: 'None'.
+        :param always_visible: Establishes if the new PageElement should always be visible in the page.
+                               This will be the 'always_visible' of the PageElement objects generated using this
+                               PageElementGenerator object. Default value: 'self.always_visible'.
+        :param html_parent: The 'html parent' of the new PageElement, if it is different from 'parent'
+                            ('parent' is used as the 'real_html_parent' if 'html_parent' is None).
+                            This will be the 'html_parent' of the PageElement objects generated using this
+                            PageElementGenerator object. Default value: 'self.html_parent'.
+        :param order: If 'locator' returns more than one element, this determine which to use (zero-based).
+                      This will be the 'order' of the PageElement objects generated using this
+                      PageElementGenerator object. Default value: 'self.order'.
+        :param default_role: Establishes the default role of the PageElement that is used in get/set operations.
+                             If not provided, Robopom tries to guess it ('text' is used as default if can not guess).
+                             Possible values: `text`, `select`, `checkbox`, `password`.
+                             This will be the 'order' of the PageElement objects generated using this
+                             PageElementGenerator object. Default value: 'self.default_role'.
+        :param prefer_visible: If 'prefer_visible' is 'True' and 'locator' returns more than one element,
+                               the first 'visible' element is used. If 'False', the first element is used
+                               (visible or not).
+                               This will be the 'prefer_visible' of the PageElement objects generated using this
+                               PageElementGenerator object. Default value: 'self.prefer_visible'.
+        :return: A new 'PageElementGenerator' that is a self's child.
+        """
         # name and short are not inherited
         if always_visible is None:
             always_visible = self.always_visible
@@ -758,7 +879,34 @@ class PageElementGenerator(PageComponent):
                           order: typing.Optional[int] = None,
                           default_role: str = None,
                           prefer_visible: bool = None, ) -> PageElementGeneratorInstance:
+        """
+        Returns a ``PageElementGeneratorInstance`` (a ``PageElement`` generated from a ``PageElementGenerator``)
+        using the ``format_args`` and ``format_kwargs`` provided.
 
+        The ``locator`` of the new ``PageElementGeneratorInstance`` is calculated using:
+        ``locator_generator.format(*format_args, **format_kwargs)``.
+        If ``self.parent`` is a ``PageElementGenerator`` too, same ``format`` is applied to it.
+
+        :param name: Name of the new PageElementGeneratorInstance. If None, a unique name (based on object id) is used.
+        :param format_args: Positional argument list used to generate the new locator.
+        :param format_kwargs: Named argument dictionary used to generate the new locator.
+        :param short: A 'shortcut' name used to identify the new element in the page. Default value: 'None'.
+        :param always_visible: Establishes if the new PageElement should always be visible in the page.
+                               Default value: 'self.always_visible'.
+        :param html_parent: The 'html parent' of the new PageElement, if it is different from 'parent'
+                            ('parent' is used as the 'real_html_parent' if 'html_parent' is None).
+                            Default value: 'self.html_parent'.
+        :param order: If 'locator' returns more than one element, this determine which to use (zero-based).
+                      Default value: 'self.order'.
+        :param default_role: Establishes the default role of the PageElement that is used in get/set operations.
+                             If not provided, Robopom tries to guess it ('text' is used as default if can not guess).
+                             Possible values: `text`, `select`, `checkbox`, `password`.
+                             Default value: 'self.default_role'.
+        :param prefer_visible: If 'prefer_visible' is 'True' and 'locator' returns more than one element,
+                               the first 'visible' element is used. If 'False', the first element is used
+                               (visible or not). Default value: 'self.prefer_visible'.
+        :return: A new 'PageElementGeneratorInstance' using 'format_args' and 'format_kwargs'.
+        """
         return PageElementGeneratorInstance(
             generator=self,
             name=name,
@@ -774,6 +922,10 @@ class PageElementGenerator(PageComponent):
 
 
 class PageElementGeneratorInstance(PageElement):
+    """
+    Class that represents a single html object (same as ``PageElement``), but a ``PageElementGeneratorInstance``
+    is a special kind of ``PageElement`` obtained from a ``PageElementGenerator``.
+    """
     def __init__(self,
                  generator: PageElementGenerator,
                  name: str = None,
@@ -786,6 +938,35 @@ class PageElementGeneratorInstance(PageElement):
                  order: int = None,
                  default_role: str = None,
                  prefer_visible: bool = None, ):
+        """
+        Creates a new ``PageElementGeneratorInstance`` object.
+
+        The ``locator`` of the new ``PageElementGeneratorInstance`` is calculated using:
+        ``locator_generator.format(*format_args, **format_kwargs)``.
+        If ``generator.parent`` is a ``PageElementGenerator`` too, same ``format`` is applied to it.
+
+        The ``parent`` of the new ``PageElementGeneratorInstance`` is obtained from ``generator.parent``.
+
+        :param generator: The 'PageElementGenerator' used to generate the new 'PageElement'.
+        :param name: Name of the new PageElementGeneratorInstance. If None, a unique name (based on object id) is used.
+        :param format_args: Positional argument list used to generate the new locator.
+        :param format_kwargs: Named argument dictionary used to generate the new locator.
+        :param short: A 'shortcut' name used to identify the new element in the page. Default value: 'None'.
+        :param always_visible: Establishes if the new PageElement should always be visible in the page.
+                               Default value: 'generator.always_visible'.
+        :param html_parent: The 'html parent' of the new PageElement, if it is different from 'parent'
+                            ('parent' is used as the 'real_html_parent' if 'html_parent' is None).
+                            Default value: 'generator.html_parent'.
+        :param order: If 'locator' returns more than one element, this determine which to use (zero-based).
+                      Default value: 'generator.order'.
+        :param default_role: Establishes the default role of the PageElement that is used in get/set operations.
+                             If not provided, Robopom tries to guess it ('text' is used as default if can not guess).
+                             Possible values: `text`, `select`, `checkbox`, `password`.
+                             Default value: 'generator.default_role'.
+        :param prefer_visible: If 'prefer_visible' is 'True' and 'locator' returns more than one element,
+                               the first 'visible' element is used. If 'False', the first element is used
+                               (visible or not). Default value: 'generator.prefer_visible'.
+        """
         
         if format_args is None:
             format_args = []
@@ -834,7 +1015,21 @@ class PageElementGeneratorInstance(PageElement):
 
 
 class PageElementFrame(PageElement):
+    """
+    Class that represents a ``Frame`` in a web page.
+    """
     def wait_until_loaded(self, timeout=None) -> None:
+        """
+        Stops execution until all page components marked as ``always_visible`` (this and all of it's descendants)
+        are visible.
+
+        If ``timeout`` is reached and not all page components marked as ``always_visible`` are visible, an exception
+        is raised.
+
+        :param timeout: If timeout is reached and not all page components marked as always_visible are visible,
+                        an exception is raised. If timeout is None, the SeleniumLibrary default timeout is used.
+        :return: None.
+        """
         prev_frame = self.robopom_plugin.get_current_frame()
         SeleniumLibrary.FrameKeywords(self.selenium_library).select_frame(self.path_locator)
         super().wait_until_loaded(timeout=timeout)
@@ -842,20 +1037,20 @@ class PageElementFrame(PageElement):
 
 
 class GenericComponent(Component):
-    # property_component_type_map: typing.Dict[str, typing.List[str]] = dict(
-    #     locator=["PageElement", "PageElements"],
-    #     locator_generator=["PageElementGenerator"],
-    #     always_visible=["PageElement", "PageElements", "PageElementGeneratorInstance"],
-    #     html_parent=["PageElement", "PageElements", "PageElementGenerator", "PageElementGeneratorInstance"],
-    #     order=["PageElement", "PageElementGenerator", "PageElementGeneratorInstance"],
-    #     default_role=["PageElement", "PageElements", "PageElementGenerator", "PageElementGeneratorInstance"],
-    #     prefer_visible=["PageElement", "PageElements", "PageElementGenerator", "PageElementGeneratorInstance"],
-    #     base_generator=["PageElementGeneratorInstance"],
-    #     base_generator_format_args=["PageElementGeneratorInstance"],
-    #     base_generator_format_kwargs=["PageElementGeneratorInstance"],
-    #     import_file=["PageElement", "PageElements", "PageElementGenerator", "PageElementGeneratorInstance"],
-    #     import_path=["PageElement", "PageElements", "PageElementGenerator", "PageElementGeneratorInstance"],
-    # )
+    """
+    Class that represents a ``Component`` (or any of its subclases).
+    It is used to read data from a file and generate the correct ``Component`` subclass instance.
+
+    The correct ``Component`` subclass is can be explicitly established with ``component_type``.
+    Possible values: PageObject, PageElement, PageElements, PageElementGenerator, PageElementGeneratorInstance,
+    PageElementFrame. If ``component_type`` is not provided, Robopom tries to guess it from properties provided.
+
+    Other special properties are: ``import_file`` and ``import_path``. These are used to ``import`` a component
+    from other file. The "import_file" is the path to the "other" file, and ``import_path`` is the path of the
+    component that we want to import in this other file.
+    Example: import_file="pages/other/test_component.yaml", import_path: "body"
+    If ``import_file`` and ``import_path``, the values of the imported object are used as "defaults".
+    """
     page_components_props = [
         "locator",
         "locator_generator",
@@ -888,6 +1083,30 @@ class GenericComponent(Component):
                  format_kwargs: typing.Dict[str, str] = None,
                  import_file: os.PathLike = None,
                  import_path: str = None) -> None:
+        """
+        Creates a new ``GenericComponent`` object.
+
+        :param name: The name of the new GenericComponent. Default value: None.
+        :param parent: The parent of the new GenericComponent. Default value: None.
+        :param children: The children of the new GenericComponent. Default value: None.
+        :param component_type: Explicit type of the new Component (generated from this GenericComponent).
+                               Possible values: PageObject, PageElement, PageElements, PageElementGenerator,
+                               PageElementGeneratorInstance, PageElementFrame.
+                               If not provided, Robopom tries to guess it. Default value: None.
+        :param locator: The locator of the new GenericComponent. Default value: None.
+        :param locator_generator: The locator_generator of the new GenericComponent. Default value: None.
+        :param short: The short of the new GenericComponent. Default value: None.
+        :param always_visible: The always_visible of the new GenericComponent. Default value: None.
+        :param html_parent: The html_parent of the new GenericComponent. Default value: None.
+        :param order: The order of the new GenericComponent. Default value: None.
+        :param default_role: The default_role of the new GenericComponent. Default value: None.
+        :param prefer_visible: The prefer_visible of the new GenericComponent. Default value: None.
+        :param generator: The generator of the new GenericComponent. Default value: None.
+        :param format_args: The format_args of the new GenericComponent. Default value: None.
+        :param format_kwargs: The format_kwargs of the new GenericComponent. Default value: None.
+        :param import_file: The file path used to import the GenericComponent from. Default value: None.
+        :param import_path: The path in import_file of the component that we want to import. Default value: None.
+        """
         kwargs = dict(
             component_type=component_type,
             locator=locator,
@@ -957,6 +1176,11 @@ class GenericComponent(Component):
 
     @property
     def kwargs(self) -> dict:
+        """
+        Dictionary with all the properties of the ``GenericComponent``.
+
+        :return: Dictionary with all the properties of the GenericComponent.
+        """
         return dict(
             component_type=self.component_type,
             locator=self.locator,
@@ -976,16 +1200,40 @@ class GenericComponent(Component):
 
     @property
     def not_none_kwargs(self) -> dict:
+        """
+        Dictionary with all the properties of the ``GenericComponent`` that are not ``None``
+        (or "almost None", like an empty list, or an empty dictionary).
+
+        :return: Dictionary with all the properties of the GenericComponent that are not None
+        (or almost None, like an empty list, or an empty dictionary).
+        """
         return {
             key: value for key, value in self.kwargs.items() if value not in constants.ALMOST_NONE}
 
     @property
     def not_none_page_component_kwargs(self) -> dict:
+        """
+        Dictionary with all the properties of the ``GenericComponent`` that are ``PageComponent`` properties
+        and are not ``None`` (or "almost None", like an empty list, or an empty dictionary).
+
+        ``PageComponent`` properties are defined in ``page_components_props``.
+
+        :return: Dictionary with all the properties of the GenericComponent that are PageComponent properties
+                 and are not None (or almost None, like an empty list, or an empty dictionary).
+        """
         return {
             key: value for key, value in self.not_none_kwargs.items() if key in self.page_components_props
         }
 
     def update_with_imported(self, imported: GenericComponent) -> None:
+        """
+        Updates the properties of this object with the properties of the ``imported`` object.
+
+        If a property of this object is ``None``, then it is replaced with the same property of the ``imported`` object.
+
+        :param imported: Object used to replace the properties of the object.
+        :return: None.
+        """
         imported.guess_component_type()
 
         self.name = imported.name if self.name is None else self.name
@@ -1017,6 +1265,16 @@ class GenericComponent(Component):
                 imported_child.parent = self
 
     def guess_component_type(self):
+        """
+        Returns a string with the type that ``robopom`` "thinks" this GenericComponent should be.
+
+        Possible returned values are: "PageObject", "PageElementGenerator", "PageElementGeneratorInstance",
+        "PageElement".
+
+        It is used when no explicit ``component_type`` is provided.
+
+        :return: String with the type that robopom thinks this GenericComponent should be.
+        """
         if self.component_type is None:
             # Try to guess component_type
             if self.locator is None and self.locator_generator is None and self.generator is None:
@@ -1029,6 +1287,14 @@ class GenericComponent(Component):
                 self.component_type = "PageElement"
 
     def get_component_type_instance(self, parent: PageComponent = None) -> PageComponent:
+        """
+        Returns a new ``PageComponent`` subclass instance generated from this ``GenericComponent`` properties.
+
+        The class of this new instance will be ``component_type`` (guessed by ``robopom`` or not).
+
+        :param parent: The parent of the new PageComponent. Default value: None.
+        :return: New PageComponent subclass instance generated from this GenericComponent properties.
+        """
         # Create a new instance, with children
         name = None if self.auto_named else self.name
         if self.component_type.casefold() == "PageObject".casefold():
