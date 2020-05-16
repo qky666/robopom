@@ -9,9 +9,6 @@ import robot.libraries.BuiltIn as robot_built_in
 import robopom.model as model
 import robopom.component_loader as file_loader
 import robopom.constants as constants
-import robopom.ComponentVariables as component_variables
-import robot.parsing.model as robot_model
-import robot.parsing.settings as robot_settings
 
 
 class RobopomSeleniumPlugin(SeleniumLibrary.base.LibraryComponent):
@@ -708,11 +705,9 @@ class RobopomSeleniumPlugin(SeleniumLibrary.base.LibraryComponent):
 
         # Pages variables
         pages_variables = {}
-        if self.robot_running:
-            self.load_pages_files()
-            pages_variables.update(self.root.variables_dictionary())
-        else:
-            pages_variables.update(component_variables.ComponentVariables.get_variables(self.pages_files))
+        assert self.robot_running, f"Robot Framework should be running to 'update_variables_file'"
+        self.load_pages_files()
+        pages_variables.update(self.root.variables_dictionary())
         text = text + "###################\n"
         text = text + "# PAGES VARIABLES #\n"
         text = text + "###################\n"
@@ -735,17 +730,10 @@ class RobopomSeleniumPlugin(SeleniumLibrary.base.LibraryComponent):
             if os.path.isfile(page_file):
                 # It seems that import_resource only accepts unix like path separator
                 self.built_in.import_resource(str(page_file).replace("\\", "/"))
-                page_names = []
-                res = robot_model.ResourceFile(page_file).populate()
-                for page_res in res.imports.data:
-                    page_res: robot_settings.Resource
-                    page_names.append(os.path.basename(os.path.splitext(page_res.name)[0]))
-                for page_name in page_names:
-                    self.built_in.run_keyword(f"{page_name}.Init Page Elements")
 
-    #############
-    # OVERRIDES #
-    #############
+    ##############################################
+    # SELENIUM OVERRIDES  (and auxiliar methods) #
+    ##############################################
 
     def locator_description(self, locator=None):
         if locator is None:

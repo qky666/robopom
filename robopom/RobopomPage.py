@@ -47,7 +47,8 @@ class RobopomPage:
         self.parent_page_path = f"{model.Component.separator}{constants.ROOT_NAME}{model.Component.separator}" \
                                 f"{self.parent_page_name}" if self.parent_page_name is not None else None
         self.built_in = robot_built_in.BuiltIn()
-        # self.added_to_model = False
+
+        self.add_to_model_if_needed()
 
     @staticmethod
     def get_yaml_file(file: os.PathLike = None) -> typing.Optional[os.PathLike]:
@@ -84,7 +85,7 @@ class RobopomPage:
     def run_keyword(self, name: str, args: list, kwargs: dict) -> typing.Any:
         """
         Runs the `name` keyword, with `args` as positional arguments, and `kwargs` as named arguments.
-        Returns the keyword returned value.
+        Returns the keyword returned value. It is used by the `Robot Framework`.
 
         :param name: The keyword.
         :param args: Positional arguments.
@@ -93,7 +94,13 @@ class RobopomPage:
         """
         return getattr(self, name)(*args, **kwargs)
 
-    def get_keyword_documentation(self, name):
+    def get_keyword_documentation(self, name: str) -> str:
+        """
+        Returns the documentation string of the `name` keyword. It is used by the `Robot Framework`.
+
+        :param name: The keyword.
+        :return: Documentation string of the keyword.
+        """
         if name == "__intro__":
             return inspect.getdoc(RobopomPage)
         return inspect.getdoc(getattr(self, name))
@@ -114,7 +121,13 @@ class RobopomPage:
     #         value.append(s)
     #     return value
 
-    def get_keyword_arguments(self, name):
+    def get_keyword_arguments(self, name: str) -> list:
+        """
+        Returns the arguments list of the `name` keyword. It is used by the `Robot Framework`.
+
+        :param name: The keyword.
+        :return: The arguments list.
+        """
         value = []
         method = getattr(self, name)
         spec = inspect.getfullargspec(method)
