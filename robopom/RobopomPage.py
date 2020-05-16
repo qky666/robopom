@@ -31,15 +31,20 @@ class RobopomPage:
     """
     added_to_model_page_file_paths = []
 
-    def __init__(self, page_file_path: os.PathLike = "sample_page_file_path", parent_page_name: str = None) -> None:
+    def __init__(self,
+                 page_file_path: os.PathLike,
+                 parent_page_name: str = None,
+                 selenium_library_name: str = "SeleniumLibrary") -> None:
         """
         Creates a new `RobopomPage`.
 
         :param page_file_path: Path to the page file (without extension).
         :param parent_page_name: Optional. Name of the parent page (if it has a parent page).
+        :param selenium_library_name: Optional. Name given to the SeleniumLibrary when imported.
         """
         self.page_file_path = page_file_path
         self.parent_page_name = parent_page_name
+        self.selenium_library_name = selenium_library_name
 
         self.page_name = os.path.splitext(os.path.basename(self.page_file_path))[0]
         self.model_file = self.get_yaml_file(self.page_file_path)
@@ -159,7 +164,17 @@ class RobopomPage:
         return value
 
     @staticmethod
-    def _get_arg_spec(func_or_method):
+    def _get_arg_spec(func_or_method: typing.Callable) -> typing.Tuple[typing.List[str],
+                                                                       typing.Iterator[typing.Tuple],
+                                                                       typing.Optional[str],
+                                                                       typing.Optional[str]]:
+        """
+        Returns a tuple with arguments info of a function or method.
+
+        :param func_or_method: Function or method to inspect.
+        :return: Tuple: Mandatory arguments, default values, name of * parameter (or None),
+                 name of ** parameter (or None).
+        """
         spec = inspect.getfullargspec(func_or_method)
         kwargs_name = spec.varkw
         args = spec.args[1:] if inspect.ismethod(func_or_method) else spec.args  # drop self
@@ -169,30 +184,66 @@ class RobopomPage:
         defaults = zip(args[nargs:], defaults)
         return mandatory, defaults, spec.varargs, kwargs_name
 
-    def get_keyword_types(self, name):
+    def get_keyword_types(self, name: str) -> list:
+        """
+        Types of the `name` keyword arguments. Used by the `Robot Framework`.
+
+        :param name: The keyword.
+        :return: List of the keyword arguments types.
+        """
         return getattr(getattr(self, name), 'robot_types')
 
     def add_to_model_if_needed(self) -> None:
+        """
+        Add this `RobopomPage` to the model tree (if it has no been added before).
+
+        :return: None.
+        """
         if (self.page_file_path in RobopomPage.added_to_model_page_file_paths) is False:
             self.init_page_elements()
             RobopomPage.added_to_model_page_file_paths.append(self.page_file_path)
 
     def selenium_library(self) -> SeleniumLibrary.SeleniumLibrary:
-        return self.built_in.get_library_instance('SeleniumLibrary')
+        """
+        Returns the `SeleniumLibrary` instance been used.
+
+        :return: The SeleniumLibrary instance.
+        """
+        return self.built_in.get_library_instance(self.selenium_library_name)
 
     def robopom_plugin(self) -> robopom_selenium_plugin.RobopomSeleniumPlugin:
+        """
+        Returns the `RobopomSeleniumPlugin` been used.
+
+        :return: The RobopomSeleniumPlugin.
+        """
         return getattr(self.selenium_library(), "robopom_plugin")
 
     def parent_page_library(self) -> RobopomPage:
+        """
+        Returns the parent page library object (`RobopomPage` instance) that represents the parent of this page.
+
+        :return: The parent page library object.
+        """
         return self.built_in.get_library_instance(self.parent_page_name) if self.parent_page_name is not None else None
 
     def page_object(self) -> model.PageObject:
+        """
+        Returns the page object (`PageObject` instance) associated to this page.
+
+        :return: The page object associated to this page.
+        """
         self.add_to_model_if_needed()
         po = self.robopom_plugin().get_component(self.page_path)
         assert isinstance(po, model.PageObject), f"page_object should be a PageObject, but it is a {type(po)}"
         return po
 
     def parent_page_object(self) -> typing.Optional[model.PageObject]:
+        """
+        The page object (`PageObject` instance) associated to the `parent` this page.
+
+        :return: The page object associated to the parent this page.
+        """
         if self.parent_page_path is None:
             return None
         po = self.robopom_plugin().get_component(self.parent_page_path)
@@ -201,6 +252,11 @@ class RobopomPage:
         return po
 
     def parent_pages_names(self) -> typing.List[str]:
+        """
+        Returns the list of names of all the `ancestors` pages (starting from `root`).
+
+        :return: List of names of all the ancestors pages.
+        """
         if self.parent_page_name is None:
             return []
         else:
@@ -378,15 +434,30 @@ class RobopomPage:
         )
         return instance.absolute_path
 
-    def _override_run(self, keyword: str, method: typing.Callable, *args, **kwargs):
+    def _override_run(self,
+                      keyword: str,
+                      method: typing.Callable,
+                      *args,
+                      **kwargs, ) -> typing.Any:
+        """
+        Runs the `Override [keyword]` keyword if it exists. If not, it runs the provided `method`.
+        In both cases, it uses provided `args` as positional arguments and `kwargs` as named arguments,
+        and returns the value obtained from the run.
+
+        :param keyword: The keyword.
+        :param method: The method.
+        :param args: Positional arguments.
+        :param kwargs: Named arguments.
+        :return: Returned value from the run.
+        """
         over_keyword = f"{self.page_name}.{constants.OVERRIDE_PREFIX} {keyword}"
 
         if self.robopom_plugin().keyword_exists(over_keyword):
             run_args = list(args[:])
             run_args += [f"{key}={value}" for key, value in kwargs.items()]
-            self.built_in.run_keyword(over_keyword, *run_args)
+            return self.built_in.run_keyword(over_keyword, *run_args)
         else:
-            method(*args, **kwargs)
+            return method(*args, **kwargs)
 
     @robot_deco.keyword(types=[typing.Union[str, model.AnyConcretePageElement]])
     def wait_until_visible(self,
@@ -1031,6 +1102,12 @@ class RobopomPage:
             return
 
     def guess_role(self, element: typing.Union[model.PageElement, str]) -> str:
+        """
+        Returns an attempt to guess the `role` (str) of the provided `element`.
+
+        :param element: The element.  Can be a PageElement or the path (string) of a PageElement.
+        :return: The guessed role (str).
+        """
         element = self.get_page_element(element) if isinstance(element, str) else element
         tag_name = element.tag_name
 
@@ -1051,6 +1128,16 @@ class RobopomPage:
         return constants.ROLE_TEXT
 
     def run_custom_get_keyword(self, element: typing.Union[model.PageElement, str]) -> typing.Tuple[bool, typing.Any]:
+        """
+        Tries to run a custom `get` keyword (a keyword that "gets the value" of an element).
+        If that custom keyword exists, it is run and a tuple (`True`, `value`) is returned,
+        where the `value` is the returned value of that custom keyword.
+        If that custom keyword does not exist, a tuple (`False`, `None`) is returned.
+
+        :param element: The element that we want to get the value.
+                        Can be a PageElement or the path (string) of a PageElement.
+        :return: A tuple (True, value) if the custom keyword exists, (False, None) if not.
+        """
         element = self.get_page_element(element) if isinstance(element, str) else element
 
         # short keyword
@@ -1081,6 +1168,16 @@ class RobopomPage:
             return False, None
 
     def run_custom_set_keyword(self, element: typing.Union[model.PageElement, str], value: typing.Any) -> bool:
+        """
+        Tries to run a custom `set` keyword (a keyword that "sets the value" of an element).
+        If that custom keyword exists, it is run and `True` is returned.
+        If that custom keyword does not exist, `False` is returned.
+
+        :param element: The element that we want to set the value.
+                        Can be a PageElement or the path (string) of a PageElement.
+        :param value: The value to set.
+        :return: True if the keyword exists (and is run), False if not.
+        """
         element = self.get_page_element(element) if isinstance(element, str) else element
 
         # short keyword
