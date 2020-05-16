@@ -6,7 +6,7 @@ PATH_PREFIX = "path"
 ROOT_NAME = "root"
 # CORE_PREFIX = "Core"  # This constant is "implicitly used" only. Leave it here as a reminder.
 OVERRIDE_PREFIX = "Override"
-YAML_EXT = [".yaml", ".yml"]
+YAML_EXTENSIONS = [".yaml", ".yml"]
 
 # Default values
 PAGES_FILE = "robopom_pages.resource"

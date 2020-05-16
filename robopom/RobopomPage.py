@@ -22,7 +22,7 @@ class RobopomPage:
 
     | Library | robopom.RobopomPage | page_file_path=path/to/my_page | parent_page_name=my_parent_page | WITH NAME | my_page |
 
-    If `my_page` has no parent page, we should remove that part:
+    If `my_page` has no parent page, we should remove that parameter:
 
     | Library | robopom.RobopomPage | page_file_path=path/to/my_page | WITH NAME | my_page |
 
@@ -32,6 +32,12 @@ class RobopomPage:
     added_to_model_page_file_paths = []
 
     def __init__(self, page_file_path: os.PathLike = "sample_page_file_path", parent_page_name: str = None) -> None:
+        """
+        Creates a new `RobopomPage`.
+
+        :param page_file_path: Path to the page file (without extension).
+        :param parent_page_name: Optional. Name of the parent page (if it has a parent page).
+        """
         self.page_file_path = page_file_path
         self.parent_page_name = parent_page_name
 
@@ -45,23 +51,46 @@ class RobopomPage:
 
     @staticmethod
     def get_yaml_file(file: os.PathLike = None) -> typing.Optional[os.PathLike]:
+        """
+        Return a existing file with the same name as the provided file (ignoring extension)
+        that has a `yaml` extension (`.yaml`, `.yml`).
+        If no such a file exists, or the provided file is `None`, then `None` is returned.
+
+        :param file: The file.
+        :return: Existing yaml file with the same name (ignoring extension) as the provided file, or None.
+        """
         if file is None:
             return None
-        if os.path.splitext(file)[1] not in constants.YAML_EXT:
-            for ext in constants.YAML_EXT:
-                file = pathlib.Path(f"{file}{ext}")
-                if os.path.exists(file):
-                    return file
-            else:
-                return None
-        else:
+
+        base, ext = os.path.splitext(file)
+        if ext in constants.YAML_EXTENSIONS:
             return file
 
-    def get_keyword_names(self):
+        for yaml_ext in constants.YAML_EXTENSIONS:
+            yaml_file = pathlib.Path(f"{base}{yaml_ext}")
+            if os.path.exists(yaml_file):
+                return yaml_file
+
+        return None
+
+    def get_keyword_names(self) -> typing.List[str]:
+        """
+        Returns the list if keyword names (used by `Robot Framework`).
+
+        :return: List of keyword names.
+        """
         return [name for name in dir(self) if hasattr(getattr(self, name), 'robot_name')]
 
-    def run_keyword(self, name, args, kwargs):
-        # self.add_to_model_if_needed()
+    def run_keyword(self, name: str, args: list, kwargs: dict) -> typing.Any:
+        """
+        Runs the `name` keyword, with `args` as positional arguments, and `kwargs` as named arguments.
+        Returns the keyword returned value.
+
+        :param name: The keyword.
+        :param args: Positional arguments.
+        :param kwargs: Named arguments.
+        :return: Keyword returned value.
+        """
         return getattr(self, name)(*args, **kwargs)
 
     def get_keyword_documentation(self, name):
