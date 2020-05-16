@@ -3,6 +3,7 @@ import typing
 import os
 import pathlib
 import SeleniumLibrary
+# noinspection PyPackageRequirements
 import selenium.webdriver.remote.webelement as webelement
 import anytree
 import robot.libraries.BuiltIn as robot_built_in
@@ -27,7 +28,6 @@ class RobopomSeleniumPlugin(SeleniumLibrary.base.LibraryComponent):
 
     | Library | SeleniumLibrary | timeout=10 | plugins=robopom.RobopomSeleniumPlugin |
     """
-
     def __init__(self,
                  ctx: SeleniumLibrary.SeleniumLibrary = None,
                  pages_files: typing.Union[os.PathLike, typing.List[os.PathLike]] = None,
@@ -812,6 +812,14 @@ class RobopomSeleniumPlugin(SeleniumLibrary.base.LibraryComponent):
         return locator_desc
 
     def embed_screenshot(self, keyword: str, locator=None, moment: str = "before") -> None:
+        """
+        Adds a message (always) and embeds a screenshot (only if log level is `DEBUG` or `TRACE`) to the log file.
+
+        :param keyword: The keyword that is being executed.
+        :param locator: The associated locator.
+        :param moment: The moment when the screenshot is captured. Default value: "before" (before keyword execution).
+        :return: None.
+        """
         # Only embed in DEBUG or TRACE
         log_level = self.built_in.get_variable_value("${LOG_LEVEL}")
         log_screenshot = log_level in ["DEBUG", "TRACE"]
@@ -825,6 +833,14 @@ class RobopomSeleniumPlugin(SeleniumLibrary.base.LibraryComponent):
             SeleniumLibrary.ScreenshotKeywords(self.ctx).capture_page_screenshot(filename="EMBED")
 
     def embed_screenshot_after(self, keyword: str, locator=None) -> None:
+        """
+        Adds a message (always) and embeds a screenshot (only if log level is `DEBUG` or `TRACE`) to the log file.
+        Same as `embed_screenshot` with `moment = after`.
+
+        :param keyword: The keyword that is being executed.
+        :param locator: The associated locator.
+        :return: None.
+        """
         self.embed_screenshot(keyword, locator, "after")
 
     @SeleniumLibrary.base.keyword()
@@ -975,7 +991,11 @@ class RobopomSeleniumPlugin(SeleniumLibrary.base.LibraryComponent):
     def input_password(self, locator, password, clear=True):
         keyword = "Input Password"
         self.embed_screenshot(keyword, locator)
-        value = SeleniumLibrary.FormElementKeywords(self.ctx).input_password(locator=locator, password=password, clear=clear)
+        value = SeleniumLibrary.FormElementKeywords(self.ctx).input_password(
+            locator=locator,
+            password=password,
+            clear=clear,
+        )
         self.embed_screenshot_after(keyword, locator)
         return value
 
@@ -1290,3 +1310,8 @@ RobopomSeleniumPlugin.unselect_from_list_by_label.__doc__ = \
     SeleniumLibrary.SelectElementKeywords.unselect_from_list_by_label.__doc__
 RobopomSeleniumPlugin.unselect_from_list_by_value.__doc__ = \
     SeleniumLibrary.SelectElementKeywords.unselect_from_list_by_value.__doc__
+
+
+# Useless function. Created only to avoid a Pycharm warning
+def is_robot_running():
+    return RobopomSeleniumPlugin.is_robot_running()

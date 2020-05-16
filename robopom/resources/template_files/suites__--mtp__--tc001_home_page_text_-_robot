@@ -4,7 +4,7 @@ Documentation     Check that MTP home page shows some given text.
 Test Template     Text in MTP home page
 Resource          ../../robopom_pages.resource
 
-*** Test Cases ***    text
+*** Test Cases ***
 MTP. TC001_01. Text in home page that exist
                       MTP es Digital Business Assurance
 

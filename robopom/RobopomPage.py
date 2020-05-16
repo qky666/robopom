@@ -20,7 +20,7 @@ class RobopomPage:
     It is designed to be used in a special kind of Robot resource file where a specific `page` is defined.
     Usually, the import can be done like this:
 
-    | Library | robopom.RobopomPage | page_file_path=path/to/my_page | parent_page_name=my_parent_page | WITH NAME | my_page |
+    | Library | robopom.RobopomPage | page_file_path=path/page | parent_page_name=my_parent_page | WITH NAME | my_page |
 
     If `my_page` has no parent page, we should remove that parameter:
 
@@ -32,7 +32,7 @@ class RobopomPage:
     added_to_model_page_file_paths = []
 
     def __init__(self,
-                 page_file_path: os.PathLike,
+                 page_file_path: os.PathLike = None,
                  parent_page_name: str = None,
                  selenium_library_name: str = "SeleniumLibrary") -> None:
         """
@@ -46,9 +46,15 @@ class RobopomPage:
         self.parent_page_name = parent_page_name
         self.selenium_library_name = selenium_library_name
 
+        if self.page_file_path is None:
+            assert robopom_selenium_plugin.is_robot_running() is False, \
+                f"RobopomPage created without page_file_path"
+            return
+
         self.page_name = os.path.splitext(os.path.basename(self.page_file_path))[0]
         self.model_file = self.get_yaml_file(self.page_file_path)
-        self.page_path = f"{model.Component.separator}{constants.ROOT_NAME}{model.Component.separator}{self.page_name}"
+        self.page_path = \
+            f"{model.Component.separator}{constants.ROOT_NAME}{model.Component.separator}{self.page_name}"
         self.parent_page_path = f"{model.Component.separator}{constants.ROOT_NAME}{model.Component.separator}" \
                                 f"{self.parent_page_name}" if self.parent_page_name is not None else None
         self.built_in = robot_built_in.BuiltIn()
