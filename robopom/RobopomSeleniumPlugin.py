@@ -32,6 +32,15 @@ class RobopomSeleniumPlugin(SeleniumLibrary.base.LibraryComponent):
                  ctx: SeleniumLibrary.SeleniumLibrary = None,
                  pages_files: typing.Union[os.PathLike, typing.List[os.PathLike]] = None,
                  variables_file: os.PathLike = None, ) -> None:
+        """
+        Initializes a new `RobopomSeleniumPlugin`. It it executed by the `SeleniumLibrary` itself.
+
+        :param ctx: The SeleniumLibrary instance, provided by the SeleniumLibrary itself.
+        :param pages_files: Paths to the pages files (resources files that only import robopom pages resource files)
+                            that we want to use. Can be a single path or a list of paths.
+        :param variables_file: The path of the file where we want to store al the robopom related variables
+                               (model and constants).
+        """
         self.root = model.RootComponent(constants.ROOT_NAME)
         self.resolver = anytree.resolver.Resolver()
         self.loader = file_loader.ComponentLoader()
@@ -68,6 +77,11 @@ class RobopomSeleniumPlugin(SeleniumLibrary.base.LibraryComponent):
 
     @staticmethod
     def is_robot_running() -> bool:
+        """
+        Return `True` if `Robot Framework` is running, `False` otherwise.
+
+        :return: True if Robot Framework is running, False otherwise.
+        """
         built_in = robot_built_in.BuiltIn()
         try:
             prev_log_level = built_in.set_log_level("NONE")
@@ -78,6 +92,13 @@ class RobopomSeleniumPlugin(SeleniumLibrary.base.LibraryComponent):
 
     @staticmethod
     def remove_path_prefix(path: str) -> str:
+        """
+        It removes the `path prefix` (`path:` or `path=`) if the provided `path` starts with this prefix.
+        Otherwise, it returns the same `path` string.
+
+        :param path: The path string where we want to remove the prefix.
+        :return: The string without the prefix.
+        """
         remove = [f"{constants.PATH_PREFIX}=", f"{constants.PATH_PREFIX}:"]
         new_path = path
         for prefix in remove:
@@ -87,6 +108,13 @@ class RobopomSeleniumPlugin(SeleniumLibrary.base.LibraryComponent):
 
     @staticmethod
     def remove_separator_prefix(path: str) -> str:
+        """
+        It removes the `separator prefix` (`__`) if the provided `path` starts with this prefix.
+        Otherwise, it returns the same `path` string.
+
+        :param path: The path string where we want to remove the prefix.
+        :return: The string without the prefix.
+        """
         new_path = path
         sep = model.Component.separator
         while new_path.startswith(sep):
@@ -95,6 +123,13 @@ class RobopomSeleniumPlugin(SeleniumLibrary.base.LibraryComponent):
 
     @staticmethod
     def remove_root_prefix(path: str) -> str:
+        """
+        It removes the `root prefix` (`root`) if the provided `path` starts with this prefix and a separator (`root__`).
+        Otherwise, it returns the same `path` string.
+
+        :param path: The path string where we want to remove the prefix.
+        :return: The string without the prefix.
+        """
         new_path = path
         root = constants.ROOT_NAME
         while new_path.startswith(f"{root}{constants.SEPARATOR}"):
@@ -103,6 +138,11 @@ class RobopomSeleniumPlugin(SeleniumLibrary.base.LibraryComponent):
 
     @property
     def robot_running(self) -> bool:
+        """
+        Returns the `robot_running` property (it should be `True` is `Robot Framework` is running, `False` otherwise).
+
+        :return: The robot_running property.
+        """
         if self._robot_running is None:
             self._robot_running = self.is_robot_running()
         return self._robot_running
@@ -718,12 +758,23 @@ class RobopomSeleniumPlugin(SeleniumLibrary.base.LibraryComponent):
 
     @staticmethod
     def dictionary_to_text(dictionary: typing.Dict[str, str]) -> str:
+        """
+        Returns a text representation of a dictionary.
+
+        :param dictionary: The dictionary.
+        :return: The text representation of the dictionary.
+        """
         text = ""
         for key, value in dictionary.items():
             text += f'{key}: "{value}"\n'
         return text
 
     def load_pages_files(self) -> None:
+        """
+        Loads (in `Robot Framework`) the resource files `self.pages_files`.
+
+        :return: None.
+        """
         if not self.robot_running:
             return
         for page_file in self.pages_files:
@@ -736,6 +787,14 @@ class RobopomSeleniumPlugin(SeleniumLibrary.base.LibraryComponent):
     ##############################################
 
     def locator_description(self, locator=None):
+        """
+        Returns a detailed description of a provided `locator` if that locator is a `path` locator
+        (it is a string an starts with `path:` or `path=`).
+        Otherwise it returns the locator itself.
+
+        :param locator: The locator.
+        :return: The detailed description.
+        """
         if locator is None:
             return "None"
         locator_desc = locator
