@@ -19,9 +19,14 @@ a Robot Framework library for web testing that uses [Selenium](https://www.selen
 
 Run `robopom template` to generate a sample project skeleton in current folder. 
 
-## Template files
-
-### `robopom.resource`
+## `robopom.resource` file
 
 Here `SeleniumLibrary` is imported.
- 
+
+Some other `global` resources (including, but not limited to, `variables`) can be defined here.
+This file should be imported in every "page file" (`page_name.resource`).
+
+## `pages` folder
+
+Hera are the "pages files". These are `*.resource` files that represent a single html page.
+  

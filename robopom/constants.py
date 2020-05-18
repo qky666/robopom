@@ -1,7 +1,6 @@
 # General
 SEPARATOR = "__"  # You can use model.Component.separator
-# TODO: If SeleniumLibrary is used with a custom name, there will be problems...
-SELENIUM_LIBRARY_NAME = "SeleniumLibrary"
+DEFAULT_SELENIUM_LIBRARY_NAME = "SeleniumLibrary"
 PATH_PREFIX = "path"
 ROOT_NAME = "root"
 # CORE_PREFIX = "Core"  # This constant is "implicitly used" only. Leave it here as a reminder.

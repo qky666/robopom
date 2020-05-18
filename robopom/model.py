@@ -106,7 +106,7 @@ class Component(anytree.Node):
         :return: The Robot Framework ``SeleniumLibrary`` instance if Robot is running, None if Robot is not runnning.
         """
         try:
-            return self.built_in.get_library_instance(constants.SELENIUM_LIBRARY_NAME)
+            return self.built_in.get_library_instance(constants.DEFAULT_SELENIUM_LIBRARY_NAME)
         except robot_built_in.RobotNotRunningError:
             return None
         except robot.errors.RobotError:

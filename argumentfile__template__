@@ -3,3 +3,4 @@
 --loglevel TRACE
 --flattenkeywords TAG:flatten
 --variablefile variables_omnia.yaml
+--pythonpath .
