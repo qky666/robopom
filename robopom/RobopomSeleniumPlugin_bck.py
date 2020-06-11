@@ -28,13 +28,10 @@ class RobopomSeleniumPlugin(SeleniumLibrary.base.LibraryComponent):
 
     | Library | SeleniumLibrary | timeout=10 | plugins=robopom.RobopomSeleniumPlugin |
     """
-
-    POM_PREFIX = "pom"
-    POM_LOCATOR_PREFIXES = [f"{POM_PREFIX}:", f"{POM_PREFIX}="]
-
     def __init__(self,
                  ctx: SeleniumLibrary.SeleniumLibrary = None,
-                 selenium_library_name: str = "SeleniumLibrary", ) -> None:
+                 pages_files: typing.Union[os.PathLike, typing.List[os.PathLike]] = None,
+                 variables_file: os.PathLike = None, ) -> None:
         """
         Initializes a new `RobopomSeleniumPlugin`. It it executed by the `SeleniumLibrary` itself.
 
