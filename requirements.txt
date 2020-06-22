@@ -1,7 +1,9 @@
 robotframework==3.2.1
 robotframework-seleniumlibrary==4.4.0
-rpaframework==1.1.0
+rpaframework==1.4.0
 anytree==2.8.0
 pyyaml==5.3.1
 robotframework-lint==1.1
 click==7.1.2
+robotframework-debuglibrary==2.2.0
+robotframework-faker==5.0.0

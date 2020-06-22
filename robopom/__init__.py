@@ -1,2 +1,2 @@
-from .RobopomSeleniumPlugin import RobopomSeleniumPlugin
+from .Plugin import RobopomSeleniumPlugin
 from .RobopomPage import RobopomPage

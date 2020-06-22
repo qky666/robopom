@@ -5,15 +5,11 @@ import pathlib
 import re
 import inspect
 import robot.api.deco as robot_deco
-import robot.libraries.BuiltIn as robot_built_in
 import SeleniumLibrary
-import robopom.Plugin as robopom_selenium_plugin
-import robopom.model as model
-import robopom.constants as constants
-import robopom.component_loader as component_loader
+from . import Plugin, model
 
 
-class RobopomPage:
+class Page:
     """
     Robot Framework Library to use in conjunction with SeleniumLibrary and RobopomSeleniumPlugin.
 
@@ -29,40 +25,13 @@ class RobopomPage:
     Here `my_page` is the name of the page.
     This name has to be unique in the model tree (or an error will be generated).
     """
-    added_to_model_page_file_paths = []
+    OVERRIDE_PREFIX = "Override"
+    CORE_PREFIX = "Core"
+    SUPER_PREFIX = "Super"
+    YAML_EXTENSIONS = [".yaml", ".yml"]
 
-    def __init__(self,
-                 page_file_path: os.PathLike = None,
-                 parent_page_name: str = None,
-                 selenium_library_name: str = "SeleniumLibrary") -> None:
-        """
-        Creates a new `RobopomPage`.
-
-        :param page_file_path: Path to the page file (without extension).
-        :param parent_page_name: Optional. Name of the parent page (if it has a parent page).
-        :param selenium_library_name: Optional. Name given to the SeleniumLibrary when imported.
-        """
-        self.page_file_path = page_file_path
-        self.parent_page_name = parent_page_name
-        self.selenium_library_name = selenium_library_name
-
-        if self.page_file_path is None:
-            assert robopom_selenium_plugin.is_robot_running() is False, \
-                f"RobopomPage created without page_file_path"
-            return
-
-        self.page_name = os.path.splitext(os.path.basename(self.page_file_path))[0]
-        self.model_file = self.get_yaml_file(self.page_file_path)
-        self.page_path = \
-            f"{model.Component.separator}{constants.ROOT_NAME}{model.Component.separator}{self.page_name}"
-        self.parent_page_path = f"{model.Component.separator}{constants.ROOT_NAME}{model.Component.separator}" \
-                                f"{self.parent_page_name}" if self.parent_page_name is not None else None
-        self.built_in = robot_built_in.BuiltIn()
-
-        self.add_to_model_if_needed()
-
-    @staticmethod
-    def get_yaml_file(file: os.PathLike = None) -> typing.Optional[os.PathLike]:
+    @classmethod
+    def get_yaml_file(cls, file: os.PathLike = None) -> typing.Optional[os.PathLike]:
         """
         Return a existing file with the same name as the provided file (ignoring extension)
         that has a `yaml` extension (`.yaml`, `.yml`).
@@ -74,16 +43,66 @@ class RobopomPage:
         if file is None:
             return None
 
+        file = pathlib.Path(os.path.abspath(file))
         base, ext = os.path.splitext(file)
-        if ext in constants.YAML_EXTENSIONS:
+        if ext in cls.YAML_EXTENSIONS:
             return file
 
-        for yaml_ext in constants.YAML_EXTENSIONS:
+        for yaml_ext in cls.YAML_EXTENSIONS:
             yaml_file = pathlib.Path(f"{base}{yaml_ext}")
             if os.path.exists(yaml_file):
                 return yaml_file
 
         return None
+
+    def __init__(self,
+                 parent_page_name: str = None,
+                 selenium_library_name: str = None) -> None:
+        """
+        Creates a new `RobopomPage`.
+
+        :param page_file_path: Path to the page file (without extension).
+        :param parent_page_name: Optional. Name of the parent page (if it has a parent page).
+        :param selenium_library_name: Optional. Name given to the SeleniumLibrary when imported.
+        """
+        self.parent_page_name = parent_page_name
+
+        if selenium_library_name is None:
+            # Try to guess selenium_library_name
+            all_libs: typing.Dict[str] = Plugin.Plugin.built_in.get_library_instance(all=True)
+            candidates = {name: lib for name, lib in all_libs.items()
+                          if isinstance(lib, SeleniumLibrary.SeleniumLibrary)}
+            assert len(candidates) == 1, \
+                f"Error in Page.__init__. The should be one candidate, but candidates are: {candidates}"
+            selenium_library_name = list(candidates.keys())[0]
+        self.selenium_library_name = selenium_library_name
+
+        # Provided by Listener. Listener also adds page to model
+        self.page_resource_file_path: typing.Optional[os.PathLike] = None
+
+    @property
+    def name(self) -> str:
+        if self.page_resource_file_path is None:
+            return ""
+        return os.path.splitext(os.path.basename(self.page_resource_file_path))[0]
+
+    @property
+    def model_file(self) -> typing.Optional[os.PathLike]:
+        return self.get_yaml_file(self.page_resource_file_path)
+
+    def local_keyword_names(self) -> typing.List[str]:
+        return [name for name in dir(self) if hasattr(getattr(self, name), 'robot_name')]
+
+    def parent_keyword_names(self) -> typing.List[str]:
+        if self.parent_page_library() is None:
+            return []
+        return self.parent_page_library().local_and_parent_keyword_names()
+
+    def local_and_parent_keyword_names(self) -> typing.List[str]:
+        return list(set(self.local_keyword_names() + self.parent_keyword_names()))
+
+    def super_keyword_names(self) -> typing.List[str]:
+        return [f"{self.SUPER_PREFIX.lower()}_{parent_kw}" for parent_kw in self.parent_keyword_names()]
 
     def get_keyword_names(self) -> typing.List[str]:
         """
@@ -91,7 +110,7 @@ class RobopomPage:
 
         :return: List of keyword names.
         """
-        return [name for name in dir(self) if hasattr(getattr(self, name), 'robot_name')]
+        return list(set(self.local_and_parent_keyword_names() + self.super_keyword_names()))
 
     def run_keyword(self, name: str, args: list, kwargs: dict) -> typing.Any:
         """
@@ -103,7 +122,14 @@ class RobopomPage:
         :param kwargs: Named arguments.
         :return: Keyword returned value.
         """
-        return getattr(self, name)(*args, **kwargs)
+        if hasattr(self, name):
+            return getattr(self, name)(*args, **kwargs)
+        else:
+            if name.casefold().startswith(self.SUPER_PREFIX.casefold()):
+                no_super_name = name[len(self.SUPER_PREFIX) + 1:]
+                if no_super_name in self.parent_page_library().get_keyword_names():
+                    name = no_super_name
+            return self.parent_page_library().run_keyword(name, args, kwargs)
 
     def get_keyword_documentation(self, name: str) -> str:
         """
@@ -113,24 +139,15 @@ class RobopomPage:
         :return: Documentation string of the keyword.
         """
         if name == "__intro__":
-            return inspect.getdoc(RobopomPage)
-        return inspect.getdoc(getattr(self, name))
-
-    # def get_keyword_arguments(self, name):
-    #     value = []
-    #     signature = inspect.signature(getattr(self, name))
-    #     for p in signature.parameters.values():
-    #         p: inspect.Parameter
-    #         s = p.name
-    #         if p.kind == inspect.Parameter.VAR_POSITIONAL:
-    #             s = f"*{s}"
-    #         elif p.kind == inspect.Parameter.VAR_KEYWORD:
-    #             s = f"**{s}"
-    #         default = p.default
-    #         if default is not inspect.Parameter.empty:
-    #             s = f"{s} = {default}"
-    #         value.append(s)
-    #     return value
+            return inspect.getdoc(self.__class__)
+        elif hasattr(self, name):
+            return inspect.getdoc(getattr(self, name))
+        else:
+            if name.casefold().startswith(self.SUPER_PREFIX.casefold()):
+                no_super_name = name[len(self.SUPER_PREFIX) + 1:]
+                if no_super_name in self.parent_page_library().get_keyword_names():
+                    name = no_super_name
+            return self.parent_page_library().get_keyword_documentation(name)
 
     def get_keyword_arguments(self, name: str) -> list:
         """
@@ -139,41 +156,51 @@ class RobopomPage:
         :param name: The keyword.
         :return: The arguments list.
         """
-        value = []
-        method = getattr(self, name)
-        spec = inspect.getfullargspec(method)
-        args = spec.args[1:] if inspect.ismethod(method) else spec.args  # drop self
-        defaults = spec.defaults or ()
-        num_args_without_default = len(args) - len(defaults)
-        args_without_default = args[:num_args_without_default]
-        value += [arg for arg in args_without_default]
+        if hasattr(self, name):
+            value = []
+            method = getattr(self, name)
+            spec = inspect.getfullargspec(method)
+            args = spec.args[1:] if inspect.ismethod(method) else spec.args  # drop self
+            defaults = spec.defaults or ()
+            num_args_without_default = len(args) - len(defaults)
+            args_without_default = args[:num_args_without_default]
+            value += [arg for arg in args_without_default]
 
-        args_with_default = zip(args[num_args_without_default:], defaults)
-        value += [f"{name}={value}" for name, value in args_with_default]
+            args_with_default = zip(args[num_args_without_default:], defaults)
+            value += [f"{name}={value}" for name, value in args_with_default]
 
-        kwonlyargs = spec.kwonlyargs or []
-        kwonlydefaults = spec.kwonlydefaults or {}
+            kwonlyargs = spec.kwonlyargs or []
+            kwonlydefaults = spec.kwonlydefaults or {}
 
-        if spec.varargs:
-            value.append(f"*{spec.varargs}")
-        elif len(kwonlyargs) > 0:
-            value.append("*")
+            if spec.varargs:
+                value.append(f"*{spec.varargs}")
+            elif len(kwonlyargs) > 0:
+                value.append("*")
 
-        if len(kwonlyargs) > 0:
-            num_kwonlyargs_without_default = len(kwonlyargs) - len(kwonlydefaults)
-            kwonlyargs_without_default = kwonlyargs[:num_kwonlyargs_without_default]
-            value += [kwonlyarg for kwonlyarg in kwonlyargs_without_default]
-            value += [f"{name}={value}" for name, value in kwonlydefaults.items()]
+            if len(kwonlyargs) > 0:
+                num_kwonlyargs_without_default = len(kwonlyargs) - len(kwonlydefaults)
+                kwonlyargs_without_default = kwonlyargs[:num_kwonlyargs_without_default]
+                value += [kwonlyarg for kwonlyarg in kwonlyargs_without_default]
+                value += [f"{name}={value}" for name, value in kwonlydefaults.items()]
 
-        if spec.varkw:
-            value.append(f"**{spec.varkw}")
-        return value
+            if spec.varkw:
+                value.append(f"**{spec.varkw}")
+            return value
+        else:
+            if name.casefold().startswith(self.SUPER_PREFIX.casefold()):
+                no_super_name = name[len(self.SUPER_PREFIX) + 1:]
+                if no_super_name in self.parent_page_library().get_keyword_names():
+                    name = no_super_name
+            return self.parent_page_library().get_keyword_arguments(name)
 
     @staticmethod
-    def _get_arg_spec(func_or_method: typing.Callable) -> typing.Tuple[typing.List[str],
-                                                                       typing.Iterator[typing.Tuple],
-                                                                       typing.Optional[str],
-                                                                       typing.Optional[str]]:
+    def _get_arg_spec(func_or_method: typing.Callable) -> \
+            typing.Tuple[
+                typing.List[str],
+                typing.Iterator[typing.Tuple],
+                typing.Optional[str],
+                typing.Optional[str],
+            ]:
         """
         Returns a tuple with arguments info of a function or method.
 
@@ -197,67 +224,51 @@ class RobopomPage:
         :param name: The keyword.
         :return: List of the keyword arguments types.
         """
-        return getattr(getattr(self, name), 'robot_types')
+        if hasattr(self, name):
+            return getattr(getattr(self, name), 'robot_types')
+        else:
+            if name.casefold().startswith(self.SUPER_PREFIX.casefold()):
+                no_super_name = name[len(self.SUPER_PREFIX) + 1:]
+                if no_super_name in self.parent_page_library().get_keyword_names():
+                    name = no_super_name
+            return self.parent_page_library().get_keyword_types(name)
 
-    def add_to_model_if_needed(self) -> None:
-        """
-        Add this `RobopomPage` to the model tree (if it has no been added before).
-
-        :return: None.
-        """
-        if (self.page_file_path in RobopomPage.added_to_model_page_file_paths) is False:
-            self.init_page_elements()
-            RobopomPage.added_to_model_page_file_paths.append(self.page_file_path)
-
-    def selenium_library(self) -> SeleniumLibrary.SeleniumLibrary:
+    def get_selenium_library(self) -> SeleniumLibrary.SeleniumLibrary:
         """
         Returns the `SeleniumLibrary` instance been used.
 
         :return: The SeleniumLibrary instance.
         """
-        return self.built_in.get_library_instance(self.selenium_library_name)
+        return Plugin.Plugin.built_in.get_library_instance(self.selenium_library_name)
 
-    def robopom_plugin(self) -> robopom_selenium_plugin.RobopomSeleniumPlugin:
+    def get_robopom_plugin(self) -> Plugin.Plugin:
         """
         Returns the `RobopomSeleniumPlugin` been used.
 
         :return: The RobopomSeleniumPlugin.
         """
-        return getattr(self.selenium_library(), "robopom_plugin")
+        return getattr(self.get_selenium_library(), "robopom_plugin")
 
-    def parent_page_library(self) -> RobopomPage:
+    def parent_page_library(self) -> typing.Optional[Page]:
         """
         Returns the parent page library object (`RobopomPage` instance) that represents the parent of this page.
 
         :return: The parent page library object.
         """
-        return self.built_in.get_library_instance(self.parent_page_name) if self.parent_page_name is not None else None
+        return Plugin.Plugin.built_in.get_library_instance(self.parent_page_name) \
+            if self.parent_page_name is not None else None
 
-    def page_object(self) -> model.PageObject:
-        """
-        Returns the page object (`PageObject` instance) associated to this page.
-
-        :return: The page object associated to this page.
-        """
-        self.add_to_model_if_needed()
-        po = self.robopom_plugin().get_component(self.page_path)
-        assert isinstance(po, model.PageObject), f"page_object should be a PageObject, but it is a {type(po)}"
-        return po
-
-    def parent_page_object(self) -> typing.Optional[model.PageObject]:
+    def parent_page_node(self) -> typing.Optional[model.Node]:
         """
         The page object (`PageObject` instance) associated to the `parent` this page.
 
         :return: The page object associated to the parent this page.
         """
-        if self.parent_page_path is None:
+        if self.parent_page_name is None:
             return None
-        po = self.robopom_plugin().get_component(self.parent_page_path)
-        assert isinstance(po, model.PageObject), \
-            f"parent_page_object should be a PageObject, but it is a {type(po)}"
-        return po
+        return self.get_robopom_plugin().get_node(self.parent_page_name)
 
-    def parent_pages_names(self) -> typing.List[str]:
+    def ancestor_pages_names(self) -> typing.List[str]:
         """
         Returns the list of names of all the `ancestors` pages (starting from `root`).
 
@@ -266,23 +277,31 @@ class RobopomPage:
         if self.parent_page_name is None:
             return []
         else:
-            value = self.parent_page_library().parent_pages_names()
+            value = self.parent_page_library().ancestor_pages_names()
             value.append(self.parent_page_name)
             return value
+
+    def ancestor_pages_libs(self) -> typing.List[Page]:
+        """
+        Returns the list of names of all the `ancestors` pages (starting from `root`).
+
+        :return: List of names of all the ancestors pages.
+        """
+        return [Plugin.Plugin.built_in.get_library_instance(name) for name in self.ancestor_pages_names()]
 
     @robot_deco.keyword
     def get_page_name(self) -> str:
         """
         Returns the name of the page.
         """
-        return self.page_name
+        return self.name
 
     @robot_deco.keyword
-    def get_page(self) -> typing.Optional[model.PageObject]:
+    def get_page_node(self) -> model.Node:
         """
         Returns the `page object` of this page.
         """
-        return self.page_object()
+        return self.get_robopom_plugin().get_node(self.name)
 
     @robot_deco.keyword
     def get_model_file(self) -> typing.Optional[os.PathLike]:
@@ -292,43 +311,16 @@ class RobopomPage:
         return self.model_file
 
     @robot_deco.keyword(types=[str])
-    def get_page_element(self, path: str) -> model.PageComponent:
+    def get_node(self, name: str) -> model.Node:
         """
         Returns the `page component` defined by `path`. If `path` is `None`, it returns the `page object`.
 
         Parameter `path` can be a real path, or a `short`.
         """
-        if path is None:
-            return self.page_object()
-
-        sep = constants.SEPARATOR
-
-        # Try to find component by short
-        if sep not in path and self.robopom_plugin().exists_component_with_short(self.page_name, path):
-            return self.robopom_plugin().get_component_with_short(self.page_name, path)
-
-        path = self.robopom_plugin().remove_path_prefix(path)
-        path = self.robopom_plugin().remove_separator_prefix(path)
-        path = self.robopom_plugin().remove_root_prefix(path)
-        path = self.robopom_plugin().remove_separator_prefix(path)
-
-        for parent_name in self.parent_pages_names():
-            prefix = f"{parent_name}{sep}"
-            if path.startswith(prefix):
-                path = path[len(parent_name):]
-                path = f"{self.page_name}{path}"
-                break
-
-        if not path.startswith(f"{self.page_name}{sep}"):
-            path = f"{self.page_name}{sep}{path}"
-
-        element = self.robopom_plugin().get_component(path)
-        assert isinstance(element, model.PageComponent), \
-            f"Element should be a PageComponent, but it is a {type(element)}"
-        return element
+        return self.get_page_node().find_node(name)
 
     @robot_deco.keyword(types=[str])
-    def get_page_elements_paths(self, path: str) -> typing.List[str]:
+    def get_multiple_node_names(self, name: str) -> typing.List[str]:
         """
         Returns a list with the `path` of every `page element` obtained from the `page elements` (multiple)
         where `path` points to.
@@ -336,109 +328,10 @@ class RobopomPage:
         `path` (string): This path should point to a `page elements` (multiple) object.
         Otherwise, this keyword generates an error.
         """
-        plural_element = self.get_page_element(path)
-        assert isinstance(plural_element, model.PageElements), \
-            f"plural_element should be a PageElements instance, bu it is a {type(plural_element)}"
-        return [page_element.absolute_path for page_element in plural_element.page_elements]
-
-    @robot_deco.keyword(types=[str,
-                               str,
-                               typing.Union[list, str],
-                               dict,
-                               typing.Union[bool, str],
-                               typing.Union[str, model.PageElement],
-                               typing.Union[int, str],
-                               str,
-                               typing.Union[int, str], ])
-    def add_page_element_generator_instance(self,
-                                            generator_path: str,
-                                            name: str = None,
-                                            format_args: typing.Union[typing.List[str], str] = None,
-                                            format_kwargs: typing.Dict[str, str] = None,
-                                            # *,
-                                            always_visible: typing.Union[bool, str] = None,
-                                            html_parent: typing.Union[str, model.PageElement] = None,
-                                            order: typing.Union[int, str] = None,
-                                            default_role: str = None,
-                                            prefer_visible: typing.Union[bool, str] = None,
-                                            ) -> str:
-        """
-        Adds a `page element generator instance` from the page element generator defined by `generator_path`
-        to the model tree, and returns the `path` of the generated `page element`.
-
-        `generator_path` (string): Path that should point to a `page element generator`.
-        Otherwise, it generates an error.
-
-        `name` (string): Optional. Name of the new generated page element.
-        If not provided, a pseudo random numeric string (string with only numeric characters) is used.
-
-        `format_args` (list or string): Optional. The `Python format arguments` (list) used in the `locator_generator`
-        of the page element generator to determine the final `locator` of the new page element.
-        It can be a list of strings (or just a single string, if the list has just one element).
-
-        `format_kwargs` (dictionary): Optional. The` Python format keyword arguments` (dictionary)
-        used in the `locator_generator` of the page element generator to determine the final `locator`
-        of the new page element.
-
-        `always_visible` (boolean or True-False-like-string): Optional. Establishes if the generated page element
-        should always be visible in the page. Default value: Value of the `always_visible` property of the generator
-        in `generator_path`.
-
-        `html_parent` (object or string): Optional. If the generator `parent` is not the `real html parent`
-        in the page, can be set here. Can be a page element (object) or a SeleniumLibrary locator (string).
-        Default value: Value of the `html_parent` property of the generator in `generator_path`.
-
-        `order` (integer or integer-like-string): Optional. If the generated `locator` returns more than one element,
-        you can determine which to use (zero-based).
-        Default value: Value of the `order` property of the generator in `generator_path`.
-
-        `default_role` (string): Optional. Establishes the default role of the generated page element that is used
-        in get/set operations.
-        Default value: Value of the `default_role` property of the generator in `generator_path`.
-        If not provided here nor in the generator in `generator_path`, Robopom tries to guess it
-        ('text' is used as default if can not guess).
-        Possible values: `text`, `select`, `checkbox`, `password`.
-
-        `prefer_visible` (boolean or True-False-string): Optional. If `prefer_visible` is `True`
-        and `locator` returns more than one element, the first 'visible' element is used.
-        If `False`, the first element is used (visible or not). Default value: Value of the `prefer_visible`
-        property of the generator in `generator_path`.
-        """
-        if isinstance(format_args, str):
-            format_args = [format_args]
-        if isinstance(always_visible, str):
-            if always_visible.casefold() == "True".casefold():
-                always_visible = True
-            elif always_visible.casefold() == "False".casefold():
-                always_visible = False
-            else:
-                assert False, \
-                    f"'always_visible' should be a boolean or 'True-False-like-string', but it is {always_visible}"
-        if isinstance(order, str):
-            order = int(order)
-        if isinstance(prefer_visible, str):
-            if prefer_visible.casefold() == "True".casefold():
-                prefer_visible = True
-            elif prefer_visible.casefold() == "False".casefold():
-                prefer_visible = False
-            else:
-                assert False, \
-                    f"'prefer_visible' should be a boolean or 'True-False-like-string', but it is {prefer_visible}"
-
-        generator_element = self.get_page_element(generator_path)
-        assert isinstance(generator_element, model.PageElementGenerator), \
-            f"generator_element should be a PageElementGenerator instance, bu it is a {type(generator_element)}"
-        instance = generator_element.page_element_with(
-            name=name,
-            format_args=format_args,
-            format_kwargs=format_kwargs,
-            always_visible=always_visible,
-            html_parent=html_parent,
-            order=order,
-            default_role=default_role,
-            prefer_visible=prefer_visible,
-        )
-        return instance.absolute_path
+        multiple_node = self.get_node(name)
+        assert multiple_node.is_multiple, \
+            f"'is_multiple' should be True, but it is {multiple_node.is_multiple}"
+        return [node.full_name for node in multiple_node.get_multiple_nodes()]
 
     def _override_run(self,
                       keyword: str,
@@ -456,18 +349,26 @@ class RobopomPage:
         :param kwargs: Named arguments.
         :return: Returned value from the run.
         """
-        over_keyword = f"{self.page_name}.{constants.OVERRIDE_PREFIX} {keyword}"
+        over_keyword = f"{self.name}.{self.OVERRIDE_PREFIX} {keyword}"
 
-        if self.robopom_plugin().keyword_exists(over_keyword):
+        if self.get_robopom_plugin().keyword_exists(over_keyword):
             run_args = list(args[:])
             run_args += [f"{key}={value}" for key, value in kwargs.items()]
-            return self.built_in.run_keyword(over_keyword, *run_args)
+            return Plugin.Plugin.built_in.run_keyword(over_keyword, *run_args)
         else:
             return method(*args, **kwargs)
 
-    @robot_deco.keyword(types=[typing.Union[str, model.AnyConcretePageElement]])
+    @robot_deco.keyword(types=[typing.Union[str, model.Node]])
+    def wait_until_present(self,
+                           node: typing.Union[model.Node, str],
+                           timeout=None, ) -> None:
+        if isinstance(node, str):
+            node = self.get_node(node)
+        self.get_robopom_plugin().wait_until_node_is_present(node, timeout)
+
+    @robot_deco.keyword(types=[typing.Union[str, model.Node]])
     def wait_until_visible(self,
-                           element: typing.Union[model.AnyConcretePageElement, str],
+                           node: typing.Union[model.Node, str],
                            timeout=None, ) -> None:
         """
         Test execution waits until `element` is visible.
@@ -481,15 +382,28 @@ class RobopomPage:
 
         Tags: flatten
         """
-        if isinstance(element, str):
-            element = self.get_page_element(element)
-        self.robopom_plugin().wait_until_page_element_is_visible(element, timeout)
+        if isinstance(node, str):
+            node = self.get_node(node)
+        self.get_robopom_plugin().wait_until_node_is_visible(node, timeout)
+
+    @robot_deco.keyword(types=[typing.Union[str, model.Node]])
+    def wait_until_enabled(self,
+                           node: typing.Union[model.Node, str],
+                           timeout=None, ) -> None:
+        if isinstance(node, str):
+            node = self.get_node(node)
+        self.get_robopom_plugin().wait_until_node_is_enabled(node, timeout)
+
+    @robot_deco.keyword(types=[typing.Union[str, model.Node]])
+    def wait_until_selected(self,
+                            node: typing.Union[model.Node, str],
+                            timeout=None, ) -> None:
+        if isinstance(node, str):
+            node = self.get_node(node)
+        self.get_robopom_plugin().wait_until_node_is_selected(node, timeout)
 
     @robot_deco.keyword(types=[None, typing.Union[bool, str]])
-    def wait_until_loaded(self,
-                          timeout=None,
-                          # *,
-                          set_library_search_order: typing.Union[bool, str] = True) -> None:
+    def wait_until_loaded(self, timeout=None) -> None:
         """
         Default implementation: Test execution waits until al elements that should be visible in page
         (the ones that have `always_visible` = `True`) are indeed visible.
@@ -513,16 +427,12 @@ class RobopomPage:
         """
         self._override_run(
             "Wait Until Loaded",
-            self.core_wait_until_loaded,
+            self.super_wait_until_loaded,
             timeout,
-            set_library_search_order=set_library_search_order,
         )
 
     @robot_deco.keyword
-    def core_wait_until_loaded(self,
-                               timeout=None,
-                               # *,
-                               set_library_search_order: typing.Union[bool, str] = True, ) -> None:
+    def super_wait_until_loaded(self, timeout=None) -> None:
         """
         Test execution waits until al elements that should be visible in page
         (the ones that have `always_visible` = `True`) are indeed visible.
@@ -541,27 +451,42 @@ class RobopomPage:
         If `True`, sets library search order so that subsequent keywords are searched first in this page.
         Default value: True.
         """
-        if isinstance(set_library_search_order, str):
-            if set_library_search_order.casefold() == "True".casefold():
-                set_library_search_order = True
-            elif set_library_search_order.casefold() == "False".casefold():
-                set_library_search_order = False
-            else:
-                assert False, \
-                    f"'set_library_search_order' should be a boolean or 'True-False-like-string', " \
-                    f"but it is {set_library_search_order}"
-        if set_library_search_order:
-            self.built_in.set_library_search_order(self.page_name)
+        set_search_order = self.get_robopom_plugin().set_library_search_order_in_wait_until_loaded
+        built_in = Plugin.Plugin.built_in
+        if set_search_order:
+            built_in.set_library_search_order(self.name)
 
         if self.parent_page_library() is not None:
             self.parent_page_library().wait_until_loaded(timeout)
-        self.page_object().wait_until_loaded(timeout)
+        self.get_page_node().wait_until_loaded(timeout)
 
-        if set_library_search_order:
-            self.built_in.set_library_search_order(self.page_name)
+        if set_search_order:
+            built_in.set_library_search_order(self.name)
+
+    def get_node_from_file(self) -> model.Node:
+        ancestor_node: typing.Optional[model.Node] = None
+        for ancestor_page_lib in self.ancestor_pages_libs():
+            if ancestor_page_lib.model_file is not None:
+                current_node = Plugin.Plugin.get_node_from_file(ancestor_page_lib.model_file)
+            else:
+                current_node = model.Node(name=ancestor_page_lib.name)
+            current_node.update_with_defaults_from(ancestor_node)
+            ancestor_node = current_node
+
+        if self.model_file is not None:
+            page_node = Plugin.Plugin.get_node_from_file(self.model_file)
+        else:
+            page_node = model.Node(name=self.name)
+
+        page_node.update_with_defaults_from(ancestor_node)
+        return page_node
 
     @robot_deco.keyword
-    def init_page_elements(self) -> None:
+    def attach_page_node(self) -> None:
+        self.get_robopom_plugin().attach_node(self.get_node_from_file())
+
+    @robot_deco.keyword
+    def init_page_nodes(self) -> None:
         """
         Default implementation: Initializes the page components defined in the page model file.
 
@@ -571,32 +496,58 @@ class RobopomPage:
         This override can be used to create additional `page components` that can not be added
         to the YAML `page model file` for some reason.
         """
-        self._override_run("Init Page Elements", self.core_init_page_elements)
+        self._override_run("Init Page Nodes", self.super_init_page_nodes)
 
     @robot_deco.keyword
-    def core_init_page_elements(self) -> None:
+    def super_init_page_nodes(self) -> None:
         """
         Initializes the page components defined in the page model file.
 
         This keyword should only be called from a `Override Init Page Elements` custom keyword
         in the `page resource file`.
         """
+        self.attach_page_node()
 
-        if self.model_file is not None:
-            generic_page = component_loader.ComponentLoader.load_generic_component_from_file(self.model_file)
-        else:
-            generic_page = model.GenericComponent(name=self.page_name, component_type="PageObject")
+        for ancestor_page_name in self.ancestor_pages_names():
+            ancestor_kw = f"{ancestor_page_name}.{self.OVERRIDE_PREFIX} Init Page Nodes"
+            if self.get_robopom_plugin().keyword_exists(ancestor_kw):
+                Plugin.Plugin.built_in.run_keyword(ancestor_kw)
 
-        parent_generic_page = None
-        if self.parent_page_name is not None and self.parent_page_library().model_file is not None:
-            parent_generic_page = component_loader.ComponentLoader.load_generic_component_from_file(
-                self.parent_page_library().model_file,
-            )
-        if parent_generic_page is not None:
-            generic_page.update_with_imported(parent_generic_page)
+    @robot_deco.keyword(types=[typing.Union[str, model.Node], typing.Any, bool])
+    def default_set_node_value(self,
+                               node: typing.Union[model.Node, str],
+                               value: typing.Any = None,
+                               force: bool = False) -> None:
+        """
+        Sets the text of an `element`. If it can not be done (because `element` is not an `input`, for example),
+        it generates an error.
 
-        page = generic_page.get_component_type_instance()
-        self.robopom_plugin().add_page_component(page)
+        `element` (object or string): The page element where action is performed.
+        It can be a `page element` object, a `page elements` object (multiple), or the `path` (string) pointing to
+        any of these objects.
+
+        `value` (string or None): The text value. If `None`, no action is performed.
+
+        Tags: flatten
+        """
+        if value is None:
+            return
+        node = self.get_node(node) if isinstance(node, str) else node
+
+        # node should be present
+        assert node.is_present(), \
+            f"Trying to 'default_set_node_value' but node is not present. Locator: {node.locator}. Node: {node}"
+
+        built_in = self.get_robopom_plugin().built_in
+        # Is a checkbox?
+        is_checkbox = built_in.run_keyword_and_return_status(
+            f"{self.selenium_library_name}.Page Should Contain Checkbox",
+            node.pom_locator,
+        )
+
+
+        # SeleniumLibrary.FormElementKeywords(self.selenium_library()).input_text(node.pom_locator, value)
+        self.get_robopom_plugin().input_text(node.pom_locator, value)
 
     @robot_deco.keyword(types=[typing.Union[str, model.PageElement], str])
     def perform_set_text(self,
@@ -618,7 +569,7 @@ class RobopomPage:
             return
         element = self.get_page_element(element) if isinstance(element, str) else element
         # SeleniumLibrary.FormElementKeywords(self.selenium_library()).input_text(element.path_locator, value)
-        self.robopom_plugin().input_text(element.path_locator, value)
+        self.get_robopom_plugin().input_text(element.path_locator, value)
 
     @robot_deco.keyword(types=[typing.Union[str, model.PageElement]])
     def perform_get_text(self, element: typing.Union[model.PageElement, str]) -> typing.Optional[str]:
@@ -635,9 +586,9 @@ class RobopomPage:
         element = self.get_page_element(element) if isinstance(element, str) else element
         if not element.is_present():
             return None
-        text = SeleniumLibrary.ElementKeywords(self.selenium_library()).get_text(element.path_locator)
+        text = SeleniumLibrary.ElementKeywords(self.get_selenium_library()).get_text(element.path_locator)
         if text in [None, ""] and element.tag_name.casefold() == "input".casefold():
-            text = SeleniumLibrary.ElementKeywords(self.selenium_library()).get_value(element.path_locator)
+            text = SeleniumLibrary.ElementKeywords(self.get_selenium_library()).get_value(element.path_locator)
         return text
 
     @robot_deco.keyword(types=[typing.Union[str, model.PageElement], str])
@@ -663,7 +614,7 @@ class RobopomPage:
             return
         element = self.get_page_element(element) if isinstance(element, str) else element
         # SeleniumLibrary.FormElementKeywords(self.selenium_library()).input_password(element.path_locator, value)
-        self.robopom_plugin().input_password(element.path_locator, value)
+        self.get_robopom_plugin().input_password(element.path_locator, value)
 
     @robot_deco.keyword(types=[typing.Union[str, model.PageElement]])
     def perform_get_select(
@@ -682,7 +633,7 @@ class RobopomPage:
         element = self.get_page_element(element) if isinstance(element, str) else element
         if not element.is_present():
             return None
-        value = SeleniumLibrary.SelectElementKeywords(self.selenium_library()) \
+        value = SeleniumLibrary.SelectElementKeywords(self.get_selenium_library()) \
             .get_selected_list_labels(element.path_locator)
         # if len(value) == 1:
         #     value = value[0]
@@ -713,7 +664,7 @@ class RobopomPage:
         if isinstance(value, list) and len(value) == 0:
             # SeleniumLibrary.SelectElementKeywords(self.selenium_library()) \
             #     .select_from_list_by_label(element.path_locator)
-            self.robopom_plugin().select_from_list_by_label(element.path_locator)
+            self.get_robopom_plugin().select_from_list_by_label(element.path_locator)
             return
 
         if isinstance(value, str) or isinstance(value, int):
@@ -734,13 +685,13 @@ class RobopomPage:
             #     element.path_locator,
             #     *value_str,
             # )
-            self.robopom_plugin().select_from_list_by_label(element.path_locator, *value_str)
+            self.get_robopom_plugin().select_from_list_by_label(element.path_locator, *value_str)
         if len(value_int) > 0:
             # SeleniumLibrary.SelectElementKeywords(self.selenium_library()).select_from_list_by_index(
             #     element.path_locator,
             #     *value_int,
             # )
-            self.robopom_plugin().select_from_list_by_index(element.path_locator, *value_int)
+            self.get_robopom_plugin().select_from_list_by_index(element.path_locator, *value_int)
 
     @robot_deco.keyword(types=[typing.Union[str, model.PageElement]])
     def perform_get_checkbox(self, element: typing.Union[model.PageElement, str]) -> typing.Optional[bool]:
@@ -788,10 +739,10 @@ class RobopomPage:
         element = self.get_page_element(element) if isinstance(element, str) else element
         if value:
             # SeleniumLibrary.FormElementKeywords(self.selenium_library()).select_checkbox(element.path_locator)
-            self.robopom_plugin().select_checkbox(element.path_locator)
+            self.get_robopom_plugin().select_checkbox(element.path_locator)
         else:
             # SeleniumLibrary.FormElementKeywords(self.selenium_library()).unselect_checkbox(element.path_locator)
-            self.robopom_plugin().unselect_checkbox(element.path_locator)
+            self.get_robopom_plugin().unselect_checkbox(element.path_locator)
 
     @robot_deco.keyword(types=[typing.Union[str, model.PageElement], str])
     def perform_action(self,
@@ -814,13 +765,13 @@ class RobopomPage:
         element = self.get_page_element(element) if isinstance(element, str) else element
         if action.casefold() == constants.ACTION_CLICK.casefold():
             # SeleniumLibrary.ElementKeywords(self.selenium_library()).click_element(element.path_locator)
-            self.robopom_plugin().click_element(element.path_locator)
+            self.get_robopom_plugin().click_element(element.path_locator)
         elif action.casefold() == constants.ACTION_DOUBLE_CLICK.casefold():
             # SeleniumLibrary.ElementKeywords(self.selenium_library()).double_click_element(element.path_locator)
-            self.robopom_plugin().double_click_element(element.path_locator)
+            self.get_robopom_plugin().double_click_element(element.path_locator)
         elif action.casefold() == constants.ACTION_CONTEXT_CLICK.casefold():
             # SeleniumLibrary.ElementKeywords(self.selenium_library()).open_context_menu(element.path_locator)
-            self.robopom_plugin().open_context_menu(element.path_locator)
+            self.get_robopom_plugin().open_context_menu(element.path_locator)
 
     @robot_deco.keyword(types=[typing.Union[str, model.PageElement], None])
     def perform_on(self,
@@ -1148,27 +1099,27 @@ class RobopomPage:
 
         # short keyword
         if element.short is not None:
-            keyword = f"{element.page.name}.Get {element.short}"
-            if self.robopom_plugin().keyword_exists(keyword):
+            keyword = f"{element.get_page_library.name}.Get {element.short}"
+            if self.get_robopom_plugin().keyword_exists(keyword):
                 return True, self.built_in.run_keyword(keyword)
 
         # path keyword
-        keyword = f"{element.page.name}.Get {element.page_path}"
-        if self.robopom_plugin().keyword_exists(keyword):
+        keyword = f"{element.get_page_library.name}.Get {element.page_path}"
+        if self.get_robopom_plugin().keyword_exists(keyword):
             return True, self.built_in.run_keyword(keyword)
 
-        parent_pages = self.parent_pages_names()
+        parent_pages = self.ancestor_pages_names()
         parent_pages.reverse()
         for parent_name in parent_pages:
             # short keyword
             if element.short is not None:
                 keyword = f"{parent_name}.Get {element.short}"
-                if self.robopom_plugin().keyword_exists(keyword):
+                if self.get_robopom_plugin().keyword_exists(keyword):
                     return True, self.built_in.run_keyword(keyword)
 
             # path keyword
             keyword = f"{parent_name}.Get {element.page_path}"
-            if self.robopom_plugin().keyword_exists(keyword):
+            if self.get_robopom_plugin().keyword_exists(keyword):
                 return True, self.built_in.run_keyword(keyword)
         else:
             return False, None
@@ -1188,30 +1139,30 @@ class RobopomPage:
 
         # short keyword
         if element.short is not None:
-            keyword = f"{element.page.name}.Set {element.short}"
-            if self.robopom_plugin().keyword_exists(keyword):
+            keyword = f"{element.get_page_library.name}.Set {element.short}"
+            if self.get_robopom_plugin().keyword_exists(keyword):
                 self.built_in.run_keyword(keyword, value)
                 return True
 
         # path keyword
-        keyword = f"{element.page.name}.Set {element.page_path}"
-        if self.robopom_plugin().keyword_exists(keyword):
+        keyword = f"{element.get_page_library.name}.Set {element.page_path}"
+        if self.get_robopom_plugin().keyword_exists(keyword):
             self.built_in.run_keyword(keyword, value)
             return True
 
-        parent_pages = self.parent_pages_names()
+        parent_pages = self.ancestor_pages_names()
         parent_pages.reverse()
         for parent_name in parent_pages:
             # short keyword
             if element.short is not None:
                 keyword = f"{parent_name}.Set {element.short}"
-                if self.robopom_plugin().keyword_exists(keyword):
+                if self.get_robopom_plugin().keyword_exists(keyword):
                     self.built_in.run_keyword(keyword, value)
                     return True
 
             # path keyword
             keyword = f"{parent_name}.Set {element.page_path}"
-            if self.robopom_plugin().keyword_exists(keyword):
+            if self.get_robopom_plugin().keyword_exists(keyword):
                 self.built_in.run_keyword(keyword, value)
                 return True
         else:
