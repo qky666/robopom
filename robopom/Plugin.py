@@ -16,7 +16,7 @@ class Plugin(SeleniumLibrary.LibraryComponent):
 
     It can be imported using something like this:
 
-    | Library | SeleniumLibrary | timeout=10 | plugins=robopom.RobopomSeleniumPlugin;my_pages.resource;my_variables.yaml, plugins.MyOtherPlugin |
+    | Library | SeleniumLibrary | timeout=10 | plugins=robopom.Plugin, other_plugins.MyOtherPlugin |
 
     Here, `my_pages.resource` and `my_variables.yaml` are the paths of the `pages` file and `variables` file used in
     Update Variables File keyword.
@@ -418,49 +418,291 @@ class Plugin(SeleniumLibrary.LibraryComponent):
             f"Name of root node in file {file} should be 'None' or '{file_name}', but it is {node.name}"
         return node.find_node(name)
 
+    def locator_keyword_ends_ok(self, kw: str, locator, *args, **kwargs) -> typing.Optional[bool]:
+        element = self.find_element(locator, required=False)
+        if element is None:
+            return None
+        return self.built_in.run_keyword_and_return_status(
+            f"{self.get_selenium_library_name()}.{kw}",
+            locator,
+            *args,
+            **kwargs,
+        ) if element is not None else None
+
+    # Get element status
     @SeleniumLibrary.base.keyword
-    def wait_until_node_is_present(self,
-                                   node: typing.Union[model.Node, str],
-                                   timeout=None, ) -> None:
-        node = self.get_node(node) if isinstance(node, str) else node
-        node.wait_until_present(timeout)
-
-    @SeleniumLibrary.base.keyword
-    def wait_until_node_is_visible(self,
-                                   node: typing.Union[model.Node, str],
-                                   timeout=None, ) -> None:
-        """
-        Test execution waits until `element` is visible.
-
-        `element` (object or string): The page element that needs to be visible in page to continue execution.
-        It can be a `page element` object, a `page elements` object (multiple), or the `path` (string) pointing to
-        any of these objects.
-
-        `timeout` (Robot Framework Time): The maximum waiting time. If `element` is not visible after this time,
-        an error is generated. Default value: The timeout defined when SeleniumLibrary was imported.
-
-        Tags: flatten
-        """
-        node = self.get_node(node) if isinstance(node, str) else node
-        node.wait_until_visible(timeout)
+    def page_contains_element(self, locator) -> bool:
+        try:
+            self.assert_page_contains(locator)
+        except AssertionError:
+            return False
+        return True
 
     @SeleniumLibrary.base.keyword
-    def wait_until_node_is_enabled(self,
-                                   node: typing.Union[model.Node, str],
-                                   timeout=None, ) -> None:
-        node = self.get_node(node) if isinstance(node, str) else node
-        node.wait_until_enabled(timeout)
+    def element_is_visible(self, locator) -> typing.Optional[bool]:
+        return self.is_visible(locator)
 
     @SeleniumLibrary.base.keyword
-    def wait_until_node_is_selected(self,
-                                    node: typing.Union[model.Node, str],
-                                    timeout=None, ) -> None:
-        node = self.get_node(node) if isinstance(node, str) else node
-        node.wait_until_selected(timeout)
+    def element_is_enabled(self, locator) -> typing.Optional[bool]:
+        if not self.page_contains_element(locator):
+            return None
+        return self.is_element_enabled(locator)
 
-    ##############################################
-    # SELENIUM OVERRIDES  (and auxiliar methods) #
-    ##############################################
+    @SeleniumLibrary.base.keyword
+    def element_is_focused(self, locator) -> typing.Optional[bool]:
+        if not self.page_contains_element(locator):
+            return None
+        try:
+            SeleniumLibrary.ElementKeywords(self.ctx).element_should_be_focused(locator)
+        except AssertionError:
+            return False
+        return True
+
+    @SeleniumLibrary.base.keyword
+    def element_is_selected(self, locator) -> typing.Optional[bool]:
+        element = self.find_element(locator, required=False)
+        if element is None:
+            return None
+        return element.is_selected()
+
+    @SeleniumLibrary.base.keyword
+    def checkbox_is_selected(self, locator) -> typing.Optional[bool]:
+        if not self.page_contains_element(locator):
+            return None
+        try:
+            SeleniumLibrary.FormElementKeywords(self.ctx).checkbox_should_be_selected(locator)
+        except AssertionError:
+            return False
+        return True
+
+    # Wait keywords
+    @SeleniumLibrary.base.keyword
+    def wait_until_element_is_not_enabled(self,
+                                          locator,
+                                          timeout=None,
+                                          error=None,
+                                          ) -> None:
+        # noinspection PyProtectedMember
+        SeleniumLibrary.WaitingKeywords(self.ctx)._wait_until(
+            lambda: self.element_is_enabled(locator) is False,
+            "Element '%s' is enabled (or not present) after <TIMEOUT>." % locator,
+            timeout,
+            error,
+        )
+
+    @SeleniumLibrary.base.keyword
+    def wait_until_element_is_focused(self,
+                                      locator,
+                                      timeout=None,
+                                      error=None, ) -> None:
+        # noinspection PyProtectedMember
+        SeleniumLibrary.WaitingKeywords(self.ctx)._wait_until(
+            lambda: self.element_is_focused(locator),
+            "Element '%s' is not focused (or not present) after <TIMEOUT>." % locator,
+            timeout,
+            error,
+        )
+
+    @SeleniumLibrary.base.keyword
+    def wait_until_element_is_not_focused(self,
+                                          locator,
+                                          timeout=None,
+                                          error=None, ) -> None:
+        # noinspection PyProtectedMember
+        SeleniumLibrary.WaitingKeywords(self.ctx)._wait_until(
+            lambda: self.element_is_focused(locator) is False,
+            "Element '%s' is focused (or not present) after <TIMEOUT>." % locator,
+            timeout,
+            error,
+        )
+
+    @SeleniumLibrary.base.keyword
+    def wait_until_element_is_selected(self,
+                                       locator,
+                                       timeout=None,
+                                       error=None, ) -> None:
+        # noinspection PyProtectedMember
+        SeleniumLibrary.WaitingKeywords(self.ctx)._wait_until(
+            lambda: self.element_is_selected(),
+            "Element '%s' is not selected (or not present) after <TIMEOUT>." % locator,
+            timeout,
+            error,
+        )
+
+    @SeleniumLibrary.base.keyword
+    def wait_until_element_is_not_selected(self,
+                                           locator,
+                                           timeout=None,
+                                           error=None, ) -> None:
+        # noinspection PyProtectedMember
+        SeleniumLibrary.WaitingKeywords(self.ctx)._wait_until(
+            lambda: self.element_is_selected() is False,
+            "Element '%s' is selected (or not present) after <TIMEOUT>." % locator,
+            timeout,
+            error,
+        )
+
+    # Element types
+    @SeleniumLibrary.base.keyword
+    def element_is_button(self, locator) -> typing.Optional[bool]:
+        if not self.page_contains_element(locator):
+            return None
+        try:
+            SeleniumLibrary.FormElementKeywords(self.ctx).page_should_contain_button(locator)
+        except AssertionError:
+            return False
+        return True
+
+    @SeleniumLibrary.base.keyword
+    def element_is_checkbox(self, locator) -> typing.Optional[bool]:
+        if not self.page_contains_element(locator):
+            return None
+        try:
+            SeleniumLibrary.FormElementKeywords(self.ctx).page_should_contain_checkbox(locator)
+        except AssertionError:
+            return False
+        return True
+
+    @SeleniumLibrary.base.keyword
+    def element_is_image(self, locator) -> typing.Optional[bool]:
+        if not self.page_contains_element(locator):
+            return None
+        try:
+            SeleniumLibrary.ElementKeywords(self.ctx).page_should_contain_image(locator)
+        except AssertionError:
+            return False
+        return True
+
+    @SeleniumLibrary.base.keyword
+    def element_is_link(self, locator) -> typing.Optional[bool]:
+        if not self.page_contains_element(locator):
+            return None
+        try:
+            SeleniumLibrary.ElementKeywords(self.ctx).page_should_contain_link(locator)
+        except AssertionError:
+            return False
+        return True
+
+    @SeleniumLibrary.base.keyword
+    def element_is_list(self, locator) -> typing.Optional[bool]:
+        if not self.page_contains_element(locator):
+            return None
+        try:
+            SeleniumLibrary.SelectElementKeywords(self.ctx).page_should_contain_list(locator)
+        except AssertionError:
+            return False
+        return True
+
+    @SeleniumLibrary.base.keyword
+    def element_is_radio(self, locator) -> typing.Optional[bool]:
+        if not self.page_contains_element(locator):
+            return None
+        try:
+            SeleniumLibrary.FormElementKeywords(self.ctx).page_should_contain_radio_button(locator)
+        except AssertionError:
+            return False
+        return True
+
+    @SeleniumLibrary.base.keyword
+    def element_is_textfield(self, locator) -> typing.Optional[bool]:
+        if not self.page_contains_element(locator):
+            return None
+        try:
+            SeleniumLibrary.FormElementKeywords(self.ctx).page_should_contain_textfield(locator)
+        except AssertionError:
+            return False
+        return True
+
+    # Get / Set Field Value
+    @SeleniumLibrary.base.keyword
+    def default_get_field_value(self, locator) -> typing.Union[str, bool, None]:
+        element = self.find_element(locator, required=False)
+        if element is None:
+            return None
+        elif self.element_is_checkbox(locator):
+            return element.is_selected()
+        elif self.element_is_image(locator):
+            return element.get_attribute("src")
+        elif self.element_is_list(locator):
+            labels = SeleniumLibrary.SelectElementKeywords(self.ctx).get_selected_list_labels(locator)
+            if len(labels) == 1:
+                return labels[0]
+            else:
+                return labels
+        elif self.element_is_radio(locator):
+            return element.is_selected()
+        elif self.element_is_textfield(locator):
+            return element.get_attribute("value")
+        else:
+            return SeleniumLibrary.ElementKeywords(self.ctx).get_text(locator)
+
+    @SeleniumLibrary.base.keyword
+    def default_set_field_value(self, locator, value: typing.Any, force: bool = False) -> None:
+        if value is None:
+            return
+        self.find_element(locator, required=True)
+        if self.element_is_button(locator):
+            assert isinstance(value, bool), \
+                f"Error in 'default_set_field_value'. 'locator' is a button, but 'value' is {value}. Locator: {locator}"
+            if value is True:
+                self.click_button(locator)
+        elif self.element_is_checkbox(locator):
+            assert isinstance(value, bool), \
+                f"Error in 'default_set_field_value'. 'locator' is a checkbox, but 'value' is {value}. " \
+                f"Locator: {locator}"
+            if value is True:
+                SeleniumLibrary.FormElementKeywords(self.ctx).select_checkbox(locator)
+            else:
+                SeleniumLibrary.FormElementKeywords(self.ctx).unselect_checkbox(locator)
+        elif self.element_is_image(locator):
+            assert isinstance(value, bool), \
+                f"Error in 'default_set_field_value'. 'locator' is an image, but 'value' is {value}. Locator: {locator}"
+            if value is True:
+                self.click_image(locator)
+        elif self.element_is_link(locator):
+            assert isinstance(value, bool), \
+                f"Error in 'default_set_field_value'. 'locator' is a link, but 'value' is {value}. Locator: {locator}"
+            if value is True:
+                self.click_link(locator)
+        elif self.element_is_list(locator):
+            if not isinstance(value, list):
+                value = [value]
+            for item in value:
+                try:
+                    int(item)
+                except ValueError:
+                    self.select_from_list_by_label(locator, *value)
+                    break
+            else:
+                self.select_from_list_by_index(locator, *value)
+        elif self.element_is_radio(locator):
+            assert isinstance(value, bool), \
+                f"Error in 'default_set_field_value'. 'locator' is a radio button, but 'value' is {value}. " \
+                f"Locator: {locator}"
+            # get element group name
+            group_name = SeleniumLibrary.ElementKeywords(self.ctx).get_element_attribute(locator, "name")
+            radio_value = SeleniumLibrary.ElementKeywords(self.ctx).get_element_attribute(locator, "value")
+            if value is True:
+                if force or \
+                        self.built_in.run_keyword_and_return_status(
+                            f"{self.get_selenium_library_name()}.Radio Button Should Not Be Set To",
+                            group_name,
+                            radio_value,
+                        ):
+                    self.select_radio_button(group_name, radio_value)
+        elif self.element_is_textfield(locator):
+            element_type = SeleniumLibrary.ElementKeywords(self.ctx).get_element_attribute("type")
+            if isinstance(element_type, str) and element_type.lower() == "password":
+                self.input_password(str(value))
+            else:
+                self.input_text(str(value))
+        else:
+            # It will probably generate an error, but have to try...
+            self.input_text(str(value))
+
+    ###############################################
+    # SELENIUM OVERRIDES  (and auxiliary methods) #
+    ###############################################
 
     def locator_description(self, locator=None):
         """

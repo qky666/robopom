@@ -2,6 +2,7 @@ from __future__ import annotations
 import anytree
 import typing
 import SeleniumLibrary
+import itertools
 from . import Plugin, Page
 
 
@@ -31,6 +32,7 @@ class Node(anytree.AnyNode):
                  locator: str = None,
                  is_multiple: bool = None,
                  order: int = None,
+                 limit: int = None,
                  wait_present: bool = None,
                  wait_visible: bool = None,
                  wait_enabled: bool = None,
@@ -69,6 +71,7 @@ class Node(anytree.AnyNode):
             name=name,
             locator=locator,
             order=order,
+            limit=limit,
             wait_present=wait_present,
             wait_visible=wait_visible,
             wait_enabled=wait_enabled,
@@ -91,6 +94,7 @@ class Node(anytree.AnyNode):
         self.locator: typing.Optional[str] = locator
         self.is_multiple: typing.Optional[bool] = is_multiple
         self.order: typing.Optional[int] = order
+        self.limit: typing.Optional[int] = limit
         self.wait_present: typing.Optional[bool] = wait_present
         self.wait_visible: typing.Optional[bool] = wait_visible
         self.wait_enabled: typing.Optional[bool] = wait_enabled
@@ -117,8 +121,9 @@ class Node(anytree.AnyNode):
         return dict(
             name=self.name,
             locator=self.locator,
-            order=self.order,
             is_multiple=self.is_multiple,
+            order=self.order,
+            limit=self.limit,
             wait_present=self.wait_present,
             wait_visible=self.wait_visible,
             wait_enabled=self.wait_enabled,
@@ -214,6 +219,34 @@ class Node(anytree.AnyNode):
             return self.name if self.name is not None else ""
         else:
             return f"{self.parent.named_or_root_node.full_name} {self.name_or_id}".strip()
+
+    def aliases(self) -> typing.List[str]:
+        aliases = [self.full_name]
+
+        names = self.full_name.split()
+        page_name = names.pop(0)
+        last_name = names.pop()
+
+        names_dict = {name: [(name, True), (name, False)] for name in names}
+        possibilities = list(itertools.product(*names_dict.values()))
+        middle_names_possibilities = []
+        for posible in possibilities:
+            possible_name = ""
+            for middle_name_bool in posible:
+                middle_name, include = middle_name_bool
+                if include:
+                    possible_name += f" {middle_name}"
+            if len(possible_name) > 0:
+                middle_names_possibilities.append(possible_name.strip())
+        possible_aliases = [f"{page_name} {middle_name} {last_name}" for middle_name in middle_names_possibilities]
+        for possible_alias in possible_aliases:
+            try:
+                self.get_plugin().get_node(possible_alias)
+                aliases.append(possible_alias)
+            except anytree.search.CountError:
+                pass
+
+        return aliases
 
     @property
     def pom_locator(self) -> str:
@@ -311,6 +344,11 @@ class Node(anytree.AnyNode):
                     self.smart_pick = False
                 assert self.smart_pick is False, \
                     f"'is_multiple' is True, so 'smart_pick' should be False, but it is '{self.smart_pick}'. " \
+                    f"Node: {self}"
+
+            if self.limit is not None:
+                assert self.is_multiple is True, \
+                    f"'limit' is not None, so 'is_multiple' should be True, but it is '{self.is_multiple}'. " \
                     f"Node: {self}"
 
             if self.is_template is True:
@@ -464,14 +502,18 @@ class Node(anytree.AnyNode):
         if html_parent is not None:
             html_parent_web_element = html_parent.find_web_element(required=False)
             if html_parent_web_element is None:
-                return []
+                elements = []
             else:
-                return self.get_plugin().find_elements(
+                elements = self.get_plugin().find_elements(
                     self.selenium_locator,
                     parent=html_parent_web_element,
                 )
         else:
-            return self.get_plugin().find_elements(self.selenium_locator)
+            elements = self.get_plugin().find_elements(self.selenium_locator)
+        if self.limit is not None:
+            assert len(elements) == self.limit, \
+                f"'limit' is '{self.limit}', but found {len(elements)} elements. Node: {self}"
+        return elements
 
     def find_web_element(self,
                          required: bool = True,
@@ -636,7 +678,7 @@ class Node(anytree.AnyNode):
 
     def wait_until_present(self, timeout=None) -> None:
         SeleniumLibrary.WaitingKeywords(self.get_selenium_library()).wait_until_page_contains_element(
-            f"{Plugin.Plugin.POM_PREFIX}:{self.full_name}",
+            self.pom_locator,
             timeout=timeout,
             # error=f"Element {self} not present after {timeout}",
             # limit=None,
@@ -647,34 +689,28 @@ class Node(anytree.AnyNode):
 
     def wait_until_visible(self, timeout=None) -> None:
         SeleniumLibrary.WaitingKeywords(self.get_selenium_library()).wait_until_element_is_visible(
-            f"{Plugin.Plugin.POM_PREFIX}:{self.full_name}",
+            self.pom_locator,
             timeout=timeout,
             # error=f"Element {self} not visible after {timeout}",
         )
 
-    def is_enabled(self)-> typing.Optional[bool]:
+    def is_enabled(self) -> typing.Optional[bool]:
         element = self.find_web_element(required=False)
         return element.is_enabled() if element is not None else None
 
     def wait_until_enabled(self, timeout=None) -> None:
         SeleniumLibrary.WaitingKeywords(self.get_selenium_library()).wait_until_element_is_enabled(
-            f"{Plugin.Plugin.POM_PREFIX}:{self.full_name}",
+            self.pom_locator,
             timeout=timeout,
             # error=f"Element {self} not enabled after {timeout}",
         )
 
-    def is_selected(self)-> typing.Optional[bool]:
+    def is_selected(self) -> typing.Optional[bool]:
         element = self.find_web_element(required=False)
         return element.is_selected() if element is not None else None
 
     def wait_until_selected(self, timeout=None) -> None:
-        # noinspection PyProtectedMember
-        SeleniumLibrary.WaitingKeywords(self.get_selenium_library())._wait_until(
-            lambda: self.is_selected(),
-            "Element '%s' was not selected in <TIMEOUT>." % self.locator,
-            timeout,
-            # custom_error=f"Element {self} not selected after {timeout}",
-        )
+        self.get_plugin().wait_until_element_is_selected(self.pom_locator, timeout=timeout)
 
     def wait_until_loaded(self, timeout=None) -> None:
         self._wait_until_loaded(timeout, force_visible=True)
@@ -682,6 +718,8 @@ class Node(anytree.AnyNode):
     def _wait_until_loaded(self, timeout=None, force_visible: bool = False) -> None:
         if self.wait_present or force_visible:
             self.wait_until_present(timeout)
+            if self.limit is not None:
+                self.find_web_elements()
         if self.wait_visible or force_visible:
             self.wait_until_visible(timeout)
         if self.wait_enabled:
@@ -693,3 +731,24 @@ class Node(anytree.AnyNode):
             for e in self.children:
                 e: Node
                 e._wait_until_loaded(timeout)
+
+    def is_button(self) -> typing.Optional[bool]:
+        return self.get_plugin().element_is_button(self.pom_locator)
+
+    def is_checkbox(self) -> typing.Optional[bool]:
+        return self.get_plugin().element_is_checkbox(self.pom_locator)
+
+    def is_image(self) -> typing.Optional[bool]:
+        return self.get_plugin().element_is_image(self.pom_locator)
+
+    def is_link(self) -> typing.Optional[bool]:
+        return self.get_plugin().element_is_link(self.pom_locator)
+
+    def is_list(self) -> typing.Optional[bool]:
+        return self.get_plugin().element_is_list(self.pom_locator)
+
+    def is_radio(self) -> typing.Optional[bool]:
+        return self.get_plugin().element_is_radio(self.pom_locator)
+
+    def is_textfield(self) -> typing.Optional[bool]:
+        return self.get_plugin().element_is_textfield(self.pom_locator)
