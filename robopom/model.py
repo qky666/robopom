@@ -236,12 +236,14 @@ class Node(anytree.AnyNode):
                 middle_name, include = middle_name_bool
                 if include:
                     possible_name += f" {middle_name}"
-            if len(possible_name) > 0:
-                middle_names_possibilities.append(possible_name.strip())
+            middle_names_possibilities.append(possible_name.strip())
         possible_aliases = [f"{page_name} {middle_name} {last_name}" for middle_name in middle_names_possibilities]
         for possible_alias in possible_aliases:
             try:
-                self.get_plugin().get_node(possible_alias)
+                found = self.get_plugin().get_node(possible_alias)
+                assert found == self, \
+                    f"Found one node using alias '{possible_alias}': {found}. " \
+                    f"This node should be the same as 'self': {self}"
                 aliases.append(possible_alias)
             except anytree.search.CountError:
                 pass
