@@ -1,5 +1,7 @@
 from __future__ import annotations
 import typing
+import datetime
+import dateutil.parser
 import os
 import pathlib
 import SeleniumLibrary
@@ -29,6 +31,65 @@ class Plugin(SeleniumLibrary.LibraryComponent):
     POM_LOCATOR_PREFIXES = [f"{POM_PREFIX}:", f"{POM_PREFIX}="]
 
     built_in = robot.libraries.BuiltIn.BuiltIn()
+
+    PSEUDO_TYPE = {
+        str: str,
+        "str".casefold(): str,
+        "string".casefold(): str,
+        bool: bool,
+        "bool".casefold(): bool,
+        "boolean".casefold(): bool,
+        int: int,
+        "int".casefold(): int,
+        "integer".casefold(): int,
+        float: float,
+        "float".casefold(): float,
+        datetime.date: datetime.date,
+        "date".casefold(): datetime.date,
+        datetime.datetime: datetime.datetime,
+        "datetime".casefold(): datetime.datetime,
+    }
+
+    PSEUDO_BOOLEAN = {
+        True: True,
+        "True".casefold(): True,
+        "Yes".casefold(): True,
+        1: True,
+        False: False,
+        "False".casefold(): False,
+        "No".casefold(): False,
+        0: False,
+    }
+
+    @classmethod
+    def is_pseudo_boolean(cls, value) -> bool:
+        if isinstance(value, str):
+            value = value.casefold()
+        if value in cls.PSEUDO_BOOLEAN:
+            return True
+        else:
+            return False
+
+    @classmethod
+    def pseudo_boolean_as_bool(cls, value) -> typing.Optional[bool]:
+        if cls.is_pseudo_boolean(value) is False:
+            return None
+        return cls.PSEUDO_BOOLEAN[value]
+
+    @classmethod
+    def is_pseudo_type(cls, value) -> bool:
+        if isinstance(value, str):
+            value = value.casefold()
+        if value in cls.PSEUDO_TYPE:
+            return True
+        else:
+            return False
+
+    @classmethod
+    def pseudo_type_as_type(cls, value) -> typing.Optional[type]:
+        if cls.is_pseudo_type(value) is False:
+            return None
+        return cls.PSEUDO_TYPE[value]
 
     @classmethod
     def remove_pom_prefix(cls, path: str) -> str:
@@ -615,70 +676,106 @@ class Plugin(SeleniumLibrary.LibraryComponent):
 
     # Get / Set Field Value
     @SeleniumLibrary.base.keyword
-    def default_get_field_value(self, locator) -> typing.Union[str, bool, None]:
+    def default_get_field_value(self,
+                                locator,
+                                pseudo_type=None,
+                                **kwargs,
+                                ) -> typing.Union[None, str, bool, int, float, datetime.date, datetime.datetime]:
+        if len(kwargs) > 0:
+            self.built_in.log(f"'default_get_field_value'. Ignored 'kwargs': {kwargs}")
+
         element = self.find_element(locator, required=False)
         if element is None:
-            return None
+            value = None
         elif self.element_is_checkbox(locator):
-            return element.is_selected()
+            value = element.is_selected()
         elif self.element_is_image(locator):
-            return element.get_attribute("src")
+            value = element.get_attribute("src")
         elif self.element_is_list(locator):
             labels = SeleniumLibrary.SelectElementKeywords(self.ctx).get_selected_list_labels(locator)
             if len(labels) == 1:
-                return labels[0]
+                value = labels[0]
             else:
-                return labels
+                value = labels
         elif self.element_is_radio(locator):
-            return element.is_selected()
+            value = element.is_selected()
         elif self.element_is_textfield(locator):
-            return element.get_attribute("value")
+            value = element.get_attribute("value")
         else:
-            return SeleniumLibrary.ElementKeywords(self.ctx).get_text(locator)
+            value = SeleniumLibrary.ElementKeywords(self.ctx).get_text(locator)
+
+        return self.convert_value_to_pseudo_type(value, pseudo_type)
 
     @SeleniumLibrary.base.keyword
-    def default_set_field_value(self, locator, value: typing.Any, force: bool = False) -> None:
+    def convert_value_to_pseudo_type(self, value, pseudo_type):
+        if pseudo_type is None:
+            return value
+        pseudo_type = self.pseudo_type_as_type(pseudo_type)
+
+        if isinstance(value, typing.Iterable) and pseudo_type in [datetime.date, datetime.datetime]:
+            # Very special case: date-datetime with Iterable value
+            try:
+                return pseudo_type(tuple(value))
+            except TypeError:
+                pass
+            except ValueError:
+                pass
+
+        if isinstance(value, (list, tuple, set)):
+            return type(value)([self.convert_value_to_pseudo_type(v, pseudo_type) for v in value])
+        elif isinstance(value, dict):
+            # noinspection PyArgumentList
+            return type(value)({key: self.convert_value_to_pseudo_type(v, pseudo_type) for key, v in value.items()})
+        assert not isinstance(value, typing.Iterable) or isinstance(value, str), \
+            f"'convert_value_to_pseudo_type'. Unexpected Iterable type: {type(value)}. Value: {value}"
+
+        if pseudo_type in [datetime.date, datetime.datetime] and isinstance(value, str):
+            dt = dateutil.parser.parse(value, dateutil.parser.parserinfo(dayfirst=True))
+            if pseudo_type == datetime.datetime:
+                return dt
+            else:
+                return datetime.date(dt.year, dt.month, dt.day)
+        else:
+            # pseudo_type in [str, bool, int, float]:
+            return pseudo_type(value)
+
+    @SeleniumLibrary.base.keyword
+    def default_set_field_value(self, locator, value: typing.Any, force: bool = False, **kwargs) -> None:
+        if len(kwargs) > 0:
+            self.built_in.log(f"'default_get_field_value'. Ignored 'kwargs': {kwargs}")
         if value is None:
             return
+
         self.find_element(locator, required=True)
         if self.element_is_button(locator):
-            assert isinstance(value, bool), \
-                f"Error in 'default_set_field_value'. 'locator' is a button, but 'value' is {value}. Locator: {locator}"
+            value = self.pseudo_boolean_as_bool(value)
             if value is True:
                 self.click_button(locator)
         elif self.element_is_checkbox(locator):
-            assert isinstance(value, bool), \
-                f"Error in 'default_set_field_value'. 'locator' is a checkbox, but 'value' is {value}. " \
-                f"Locator: {locator}"
+            value = self.pseudo_boolean_as_bool(value)
             if value is True:
                 SeleniumLibrary.FormElementKeywords(self.ctx).select_checkbox(locator)
             else:
                 SeleniumLibrary.FormElementKeywords(self.ctx).unselect_checkbox(locator)
         elif self.element_is_image(locator):
-            assert isinstance(value, bool), \
-                f"Error in 'default_set_field_value'. 'locator' is an image, but 'value' is {value}. Locator: {locator}"
+            value = self.pseudo_boolean_as_bool(value)
             if value is True:
                 self.click_image(locator)
         elif self.element_is_link(locator):
-            assert isinstance(value, bool), \
-                f"Error in 'default_set_field_value'. 'locator' is a link, but 'value' is {value}. Locator: {locator}"
+            value = self.pseudo_boolean_as_bool(value)
             if value is True:
                 self.click_link(locator)
         elif self.element_is_list(locator):
             if not isinstance(value, list):
                 value = [value]
-            for item in value:
-                try:
-                    int(item)
-                except ValueError:
-                    self.select_from_list_by_label(locator, *value)
-                    break
+            try:
+                value = [int(v) for v in value]
+            except ValueError:
+                self.select_from_list_by_label(locator, *value)
             else:
                 self.select_from_list_by_index(locator, *value)
         elif self.element_is_radio(locator):
-            assert isinstance(value, bool), \
-                f"Error in 'default_set_field_value'. 'locator' is a radio button, but 'value' is {value}. " \
-                f"Locator: {locator}"
+            value = self.pseudo_boolean_as_bool(value)
             # get element group name
             group_name = SeleniumLibrary.ElementKeywords(self.ctx).get_element_attribute(locator, "name")
             radio_value = SeleniumLibrary.ElementKeywords(self.ctx).get_element_attribute(locator, "value")

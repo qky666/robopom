@@ -469,164 +469,65 @@ class Page:
             if self.get_robopom_plugin().keyword_exists(ancestor_kw):
                 Plugin.Plugin.built_in.run_keyword(ancestor_kw)
 
+    def get_custom_get_set_keyword(self,
+                                   element: typing.Union[model.Node, str],
+                                   get_set: str = "Get",
+                                   ) -> typing.Optional[str]:
+        get_set = get_set.capitalize()
+        assert get_set in ["Get", "Set"], f"'get_set' must be 'Get' or 'Set', but it is: {get_set}"
 
-
-    def run_custom_get_keyword(self, element: typing.Union[model.PageElement, str]) -> typing.Tuple[bool, typing.Any]:
-        """
-        Tries to run a custom `get` keyword (a keyword that "gets the value" of an element).
-        If that custom keyword exists, it is run and a tuple (`True`, `value`) is returned,
-        where the `value` is the returned value of that custom keyword.
-        If that custom keyword does not exist, a tuple (`False`, `None`) is returned.
-
-        :param element: The element that we want to get the value.
-                        Can be a PageElement or the path (string) of a PageElement.
-        :return: A tuple (True, value) if the custom keyword exists, (False, None) if not.
-        """
-        element = self.get_page_element(element) if isinstance(element, str) else element
-
-        # short keyword
-        if element.short is not None:
-            keyword = f"{element.get_page_library.name}.Get {element.short}"
-            if self.get_robopom_plugin().keyword_exists(keyword):
-                return True, self.built_in.run_keyword(keyword)
-
-        # path keyword
-        keyword = f"{element.get_page_library.name}.Get {element.page_path}"
-        if self.get_robopom_plugin().keyword_exists(keyword):
-            return True, self.built_in.run_keyword(keyword)
-
-        parent_pages = self.ancestor_pages_names()
-        parent_pages.reverse()
-        for parent_name in parent_pages:
-            # short keyword
-            if element.short is not None:
-                keyword = f"{parent_name}.Get {element.short}"
-                if self.get_robopom_plugin().keyword_exists(keyword):
-                    return True, self.built_in.run_keyword(keyword)
-
-            # path keyword
-            keyword = f"{parent_name}.Get {element.page_path}"
-            if self.get_robopom_plugin().keyword_exists(keyword):
-                return True, self.built_in.run_keyword(keyword)
+        if isinstance(element, str):
+            element = self.get_node(element)
+        aliases = element.aliases()
+        possible_keywords = [f"{self.name}.{get_set} {alias}" for alias in aliases]
+        keywords = [keyword for keyword in possible_keywords if self.get_robopom_plugin().keyword_exists(keyword)]
+        assert len(keywords) <= 1, f"Found more than one {get_set} keyword for '{element.full_name}': {keywords}"
+        if len(keywords) == 1:
+            return keywords[0]
         else:
-            return False, None
+            return None
 
-    def run_custom_set_keyword(self, element: typing.Union[model.PageElement, str], value: typing.Any) -> bool:
-        """
-        Tries to run a custom `set` keyword (a keyword that "sets the value" of an element).
-        If that custom keyword exists, it is run and `True` is returned.
-        If that custom keyword does not exist, `False` is returned.
-
-        :param element: The element that we want to set the value.
-                        Can be a PageElement or the path (string) of a PageElement.
-        :param value: The value to set.
-        :return: True if the keyword exists (and is run), False if not.
-        """
-        element = self.get_page_element(element) if isinstance(element, str) else element
-
-        # short keyword
-        if element.short is not None:
-            keyword = f"{element.get_page_library.name}.Set {element.short}"
-            if self.get_robopom_plugin().keyword_exists(keyword):
-                self.built_in.run_keyword(keyword, value)
-                return True
-
-        # path keyword
-        keyword = f"{element.get_page_library.name}.Set {element.page_path}"
-        if self.get_robopom_plugin().keyword_exists(keyword):
-            self.built_in.run_keyword(keyword, value)
-            return True
-
-        parent_pages = self.ancestor_pages_names()
-        parent_pages.reverse()
-        for parent_name in parent_pages:
-            # short keyword
-            if element.short is not None:
-                keyword = f"{parent_name}.Set {element.short}"
-                if self.get_robopom_plugin().keyword_exists(keyword):
-                    self.built_in.run_keyword(keyword, value)
-                    return True
-
-            # path keyword
-            keyword = f"{parent_name}.Set {element.page_path}"
-            if self.get_robopom_plugin().keyword_exists(keyword):
-                self.built_in.run_keyword(keyword, value)
-                return True
+    @robot_deco.keyword(types=[typing.Union[str, model.Node], str])
+    def get_field_value(self,
+                        element: typing.Union[str, model.Node, str],
+                        pseudo_type: str = None,
+                        **kwargs,
+                        ) -> typing.Any:
+        custom_keyword = self.get_custom_get_set_keyword(element, get_set="Get")
+        if custom_keyword is not None:
+            return self.get_robopom_plugin().built_in.run_keyword(custom_keyword, pseudo_type, **kwargs)
         else:
-            return False
+            if isinstance(element, str):
+                element = self.get_node(element)
+            if element.is_multiple:
+                nodes = element.get_multiple_nodes()
+                return [self.get_robopom_plugin().default_get_field_value(node.pom_locator, pseudo_type, **kwargs)
+                        for node in nodes]
+            else:
+                return self.get_robopom_plugin().default_get_field_value(element.pom_locator, pseudo_type, **kwargs)
 
-    @robot_deco.keyword
-    def perform(
-            self,
-            *varargs: typing.List[typing.Union[model.PageElement, str, bool, int, None]]) -> list:
-        """
-        Executes a series of Perform On actions. It returns a list based on the `get` commands received.
-
-        `varargs`: The arguments received should be pairs of `element` and `command`
-        (each one is a different parameter) that are perfomed in the same way as described in Perform On.
-
-        For each 'get' command received, the value obtained with that `get` is added to the returned list.
-
-        Tags: flatten
-        """
-        assert len(varargs) % 2 == 0, f"len(actions) should be even, but it is {len(varargs)}"
-        # Transform actions in a List of Tuples
-        action_tuples = []
-        for i in range(0, len(varargs), 2):
-            new_tuple = (varargs[i], varargs[i + 1])
-            action_tuples.append(new_tuple)
-
-        return_list = []
-        for action_list in action_tuples:
-            if len(action_list) < 2:
-                continue
-            element, command = action_list
-            if command is None:
-                continue
-            value = self.perform_on(element, command)
-            if isinstance(command, str) and command.lower().startswith(constants.GET_ACTIONS_PREFIXES):
-                return_list.append(value)
-        return return_list
-
-    @robot_deco.keyword(types=[typing.Union[str, model.PageElement]])
-    def get_element_value(self, element: typing.Union[model.PageElement, str]) -> typing.Any:
-        """
-        Returns the `element`'s value.
-
-        It is the same as:
-
-        | Perform On | `element` | get: |
-
-        As described in Perform On, if a custom keyword `Get [element_path]` (where `element_path` is the path
-        of `element` inside the page) is defined in the page resource file, that keyword is used to obtain
-        the element's value.
-
-        `element` (object or string): The page element where action is performed.
-        It can be a `page element` object, a `page elements` object (multiple), or the `path` (string) pointing to
-        any of these objects.
-        """
-        return self.perform_on(element, f"{constants.GET_PREFIX}{constants.GET_SET_SEPARATOR}")
-
-    @robot_deco.keyword(types=[typing.Union[str, model.PageElement], None])
-    def set_element_value(self,
-                          element: typing.Union[model.PageElement, str],
-                          value: typing.Any = None) -> None:
-        """
-        Sets the `element`'s value.
-
-        It is the same as:
-
-        | Perform On | `element` | `value` |
-
-        As described in Perform On, if a custom keyword `Set [element_path]` (where `element_path` is the path
-        of `element` inside the page) is defined in the page resource file, that keyword is used to set
-        the element's value.
-
-        `element` (object or string): The page element where action is performed.
-        It can be a `page element` object, a `page elements` object (multiple), or the `path` (string) pointing to
-        any of these objects.
-        """
-        return self.perform_on(element, value)
+    @robot_deco.keyword(types=[typing.Union[str, model.Node], None])
+    def set_field_value(self,
+                        element: typing.Union[str, model.Node],
+                        value: typing.Any = None,
+                        force: bool = False,
+                        **kwargs, ) -> None:
+        custom_keyword = self.get_custom_get_set_keyword(element, get_set="Set")
+        if custom_keyword is not None:
+            self.get_robopom_plugin().built_in.run_keyword(custom_keyword, value, force, **kwargs)
+            return
+        else:
+            if isinstance(element, str):
+                element = self.get_node(element)
+            if element.is_multiple:
+                nodes = element.get_multiple_nodes()
+                if not isinstance(value, list):
+                    value = [value]
+                for i, v in enumerate(value):
+                    self.get_robopom_plugin().default_set_field_value(nodes[i].pom_locator, v, force, **kwargs)
+                return
+            else:
+                self.get_robopom_plugin().default_set_field_value(element.pom_locator, value, force, **kwargs)
 
     @robot_deco.keyword(types=[typing.Union[str, model.PageElement], None])
     def compare_equals(self,

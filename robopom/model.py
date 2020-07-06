@@ -9,21 +9,6 @@ from . import Plugin, Page
 class Node(anytree.AnyNode):
     # separator = "__"
 
-    @staticmethod
-    def get_selenium_locator(
-            locator: str,
-            selenium_instance: typing.Optional[SeleniumLibrary.SeleniumLibrary, Plugin.Plugin],
-    ) -> str:
-        strategies = getattr(selenium_instance.element_finder, "_strategies", [])
-        for strategy in strategies:
-            if locator.startswith(strategy):
-                return locator
-        else:
-            if locator == "." or locator.startswith("/") or locator.startswith("./"):
-                return f"xpath:{locator}"
-            else:
-                return f"css:{locator}"
-
     def __init__(self: Node,
                  parent: Node = None,
                  children: typing.Iterable[Node] = None,
@@ -224,6 +209,11 @@ class Node(anytree.AnyNode):
         aliases = [self.full_name]
 
         names = self.full_name.split()
+        if len(names) < 2:
+            # It is a page
+            return names
+
+        # len(names) >= 2
         page_name = names.pop(0)
         last_name = names.pop()
 
@@ -237,7 +227,9 @@ class Node(anytree.AnyNode):
                 if include:
                     possible_name += f" {middle_name}"
             middle_names_possibilities.append(possible_name.strip())
-        possible_aliases = [f"{page_name} {middle_name} {last_name}" for middle_name in middle_names_possibilities]
+        possible_aliases = [f"{page_name} {middle_name} {last_name}".replace("  ", " ")
+                            for middle_name
+                            in middle_names_possibilities]
         for possible_alias in possible_aliases:
             try:
                 found = self.get_plugin().get_node(possible_alias)
@@ -490,14 +482,25 @@ class Node(anytree.AnyNode):
                     return named.parent.find_node(name)
 
     @property
-    def selenium_locator(self) -> typing.Optional[str]:
-        if self.locator is None:
+    def locator_is_explicit(self) -> bool:
+        strategies = getattr(self.get_selenium_library().element_finder, "_strategies", [])
+        if self.locator is not None and self.locator.strip().startswith(tuple(strategies)):
+            return True
+        else:
+            return False
+
+    @property
+    def xpath_or_css_explicit_locator(self) -> typing.Optional[str]:
+        if self.locator_is_explicit:
             return None
-        return self.get_selenium_locator(self.locator, self.get_plugin())
+        if self.locator == "." or self.locator.startswith(("/", "./")):
+            return f"xpath:{self.locator}"
+        else:
+            return f"css:{self.locator}"
 
     def find_web_elements(self) -> typing.List[SeleniumLibrary.locators.elementfinder.WebElement]:
-        assert self.selenium_locator is not None, \
-            f"Error in 'find_web_elements'. Locator: {self.selenium_locator}. Node: {self}"
+        assert self.locator is not None, \
+            f"Error in 'find_web_elements'. Locator: {self.locator}. Node: {self}"
         assert self._resolved, f"Error in 'find_web_elements'. Node not resolved. Node: {self}"
 
         html_parent = self.resolve_html_parent()
@@ -507,11 +510,18 @@ class Node(anytree.AnyNode):
                 elements = []
             else:
                 elements = self.get_plugin().find_elements(
-                    self.selenium_locator,
+                    self.locator,
                     parent=html_parent_web_element,
                 )
+                if len(elements) == 0 and self.xpath_or_css_explicit_locator is not None:
+                    elements = self.get_plugin().find_elements(
+                        self.xpath_or_css_explicit_locator,
+                        parent=html_parent_web_element,
+                    )
         else:
-            elements = self.get_plugin().find_elements(self.selenium_locator)
+            elements = self.get_plugin().find_elements(self.locator)
+            if len(elements) == 0 and self.xpath_or_css_explicit_locator is not None:
+                elements = self.get_plugin().find_elements(self.xpath_or_css_explicit_locator)
         if self.limit is not None:
             assert len(elements) == self.limit, \
                 f"'limit' is '{self.limit}', but found {len(elements)} elements. Node: {self}"
@@ -544,7 +554,13 @@ class Node(anytree.AnyNode):
             html_parent_web_element = None
 
         plugin = self.get_plugin()
-        element = plugin.find_element(self.selenium_locator, required=required, parent=html_parent_web_element)
+        element = plugin.find_element(self.locator, required=False, parent=html_parent_web_element)
+        if element is None and self.xpath_or_css_explicit_locator is not None:
+            element = self.get_plugin().find_element(
+                self.xpath_or_css_explicit_locator,
+                required=required,
+                parent=html_parent_web_element,
+            )
         if self.smart_pick is False and self.order is None:
             return element
         elements = self.find_web_elements()
