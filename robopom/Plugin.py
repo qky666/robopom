@@ -11,6 +11,8 @@ import anytree.importer
 import yaml
 from . import model
 
+web_element = SeleniumLibrary.locators.elementfinder.WebElement
+
 
 class Plugin(SeleniumLibrary.LibraryComponent):
     """
@@ -140,7 +142,7 @@ class Plugin(SeleniumLibrary.LibraryComponent):
         # Register Path Locator Strategy
         SeleniumLibrary.ElementKeywords(ctx).add_location_strategy(
             self.POM_PREFIX,
-            "Pom Locator Strategy",
+            self.pom_locator_strategy,
             persist=True,
         )
 
@@ -167,7 +169,7 @@ class Plugin(SeleniumLibrary.LibraryComponent):
                    raise_error: bool = True,
                    error: str = None,
                    poll: typing.Union[int, float] = 0.2,
-                   callable: typing.Callable = None,
+                   executable: typing.Callable = None,
                    args: list = None,
                    kwargs: dict = None, ) -> bool:
         if timeout is None:
@@ -177,17 +179,17 @@ class Plugin(SeleniumLibrary.LibraryComponent):
         if kwargs is None:
             kwargs = {}
 
-        value = callable(*args, **kwargs)
+        value = executable(*args, **kwargs)
         while timeout >= 0:
             if value == expected:
                 break
             time.sleep(poll)
             timeout -= poll
-            value = callable(*args, **kwargs)
+            value = executable(*args, **kwargs)
         else:
             # Condition not met
             if error is None:
-                error = f"Timeout ({timeout}) in 'wait_until': callable: {callable}, args: {args}, " \
+                error = f"Timeout ({timeout}) in 'wait_until': executable: {executable}, args: {args}, " \
                         f"kwargs: {kwargs}, expected: {expected}, raise_error: {raise_error}. " \
                         f"Last value obtained: {value}"
             if raise_error is True:
@@ -209,30 +211,44 @@ class Plugin(SeleniumLibrary.LibraryComponent):
         return True
 
     @SeleniumLibrary.base.keyword
-    def pom_locator_strategy(self,
-                             browser,
-                             locator: str,
-                             tag,
-                             constraints,
-                             ) -> typing.Optional[SeleniumLibrary.locators.elementfinder.WebElement]:
+    def pom_locator_strategy(self, parent, locator: str, tag, constraints) -> typing.List[web_element]:
         """
         Keyword that defines the `Path Locator Strategy`.
 
         Usually it is not necessary to run this keyword directly (it is used by the Robopom Plugin internally).
         """
-        self.debug(
-            f"Starting 'pom_locator_strategy' with: "
-            f"browser={browser}, locator={locator}, tag={tag}, constraints={constraints}")
-        pom_node = self.get_node(locator)
-        element = pom_node.find_web_element(required=False)
+        # Validation
+        assert isinstance(parent, web_element) is False, \
+            f"'parent' should not be a WebElement in 'pom_locator_strategy', but it is: {parent}"
+        assert tag is None, \
+            f"'tag' should be a None in 'pom_locator_strategy', but it is: {tag}"
+        assert constraints is None or (isinstance(constraints, dict) and len(constraints) == 0), \
+            f"'constraints' should be a None or an empty dict in 'pom_locator_strategy', but it is: {constraints}"
 
-        log_info = f"browser={browser}, locator={locator}, tag={tag}, constraints={constraints}. " \
-                   f"Real locator used: {pom_node.locator}"
-        if element is not None:
-            self.debug(f"Found element '{element}' using 'Pom Locator Strategy': {log_info}")
+        log_info = f"parent={parent}, locator={locator}, tag={tag}, constraints={constraints}"
+        self.debug(f"Starting 'pom_locator_strategy' with: {log_info}")
+
+        pom_node = self.get_node(locator)
+        log_info = f"{log_info}. Real locator used: {pom_node.locator}"
+
+        if pom_node.is_multiple is True:
+            elements = pom_node.find_web_elements()
+            log_info = f"{log_info}. Node is multiple"
         else:
-            self.info(f"Element not found using 'Pom Locator Strategy': {log_info}")
-        return element
+            element = pom_node.find_web_element(required=False)
+            if element is None:
+                elements = []
+            else:
+                elements = [element]
+            log_info = f"{log_info}. Node is not multiple"
+
+        if len(elements) == 0:
+            self.info(f"No element not found using 'Pom Locator Strategy': {log_info}")
+        elif len(elements) == 1:
+            self.debug(f"Found element '{elements[0]}' using 'Pom Locator Strategy': {log_info}")
+        else:
+            self.debug(f"Found elements '{elements}' using 'Pom Locator Strategy': {log_info}")
+        return elements
 
     @SeleniumLibrary.base.keyword
     def log_pom_tree(self) -> None:
@@ -263,6 +279,7 @@ class Plugin(SeleniumLibrary.LibraryComponent):
 
         `path` (string): Path of the component. If path is `None`, returns the root component.
         """
+        name = self.remove_pom_prefix(name)
         return self.pom_root.find_node(name)
 
     @SeleniumLibrary.base.keyword
@@ -726,13 +743,296 @@ class Plugin(SeleniumLibrary.LibraryComponent):
 
     # Get / Set Field Value
     @SeleniumLibrary.base.keyword
+    def get_field_value(self,
+                        locator: typing.Union[str, web_element],
+                        parent: typing.Union[web_element, str, typing.List[str]] = None,
+                        ) -> typing.Union[None, str, bool]:
+        method_name = "get_field_value"
+        if self.is_pom_locator(locator):
+            assert parent is None, \
+                f"'parent' should be None in '{method_name}' but it is: {parent}. Locator: {locator}"
+            node = self.get_node(locator)
+            assert node.is_multiple is False, \
+                f"Node should not be multiple in '{method_name}'. " \
+                f"Should use 'get_field_values'. Locator: {locator}. Node: {node}"
+            return node.get_field_value()
+        else:
+            return self.default_get_field_value(locator, parent)
+
+    @SeleniumLibrary.base.keyword
+    def get_field_values(self,
+                         locator: typing.Union[str, web_element, typing.List[web_element]],
+                         parent: typing.Union[web_element, str, typing.List[str]] = None,
+                         ) -> list:
+        method_name = "get_field_values"
+        if self.is_pom_locator(locator):
+            assert parent is None, \
+                f"'parent' should be None in '{method_name}' but it is: {parent}. Locator: {locator}"
+            node = self.get_node(locator)
+            assert node.is_multiple, \
+                f"Node should be multiple in '{method_name}'. " \
+                f"Should use 'get_field_value'. Locator: {locator}. Node: {node}"
+            return node.get_field_value()
+        else:
+            return self.default_get_field_values(locator, parent)
+
+    @SeleniumLibrary.base.keyword
+    def get_field_value_as_string(self,
+                                  locator: typing.Union[str, web_element],
+                                  parent: typing.Union[web_element, str, typing.List[str]] = None,
+                                  ) -> typing.Optional[str]:
+        method_name = "get_field_value_as_string"
+        if self.is_pom_locator(locator):
+            assert parent is None, \
+                f"'parent' should be None in '{method_name}' but it is: {parent}. Locator: {locator}"
+            node = self.get_node(locator)
+            assert node.is_multiple is False, \
+                f"Node should not be multiple in '{method_name}'. " \
+                f"Should use 'get_field_values_as_strings'. Locator: {locator}. Node: {node}"
+            return node.get_field_value_as_string()
+        else:
+            return self.default_get_field_value_as_string(locator, parent)
+
+    @SeleniumLibrary.base.keyword
+    def get_field_values_as_strings(self,
+                                    locator: typing.Union[str, web_element, typing.List[web_element]],
+                                    parent: typing.Union[web_element, str, typing.List[str]] = None,
+                                    ) -> list:
+        method_name = "get_field_values_as_strings"
+        if self.is_pom_locator(locator):
+            assert parent is None, \
+                f"'parent' should be None in '{method_name}' but it is: {parent}. Locator: {locator}"
+            node = self.get_node(locator)
+            assert node.is_multiple, \
+                f"Node should be multiple in '{method_name}'. " \
+                f"Should use 'get_field_value_as_string'. Locator: {locator}. Node: {node}"
+            return node.get_field_value_as_string()
+        else:
+            return self.default_get_field_values_as_strings(locator, parent)
+
+    @SeleniumLibrary.base.keyword
+    def get_field_value_as_integer(self,
+                                   locator: typing.Union[str, web_element],
+                                   parent: typing.Union[web_element, str, typing.List[str]] = None,
+                                   ) -> typing.Optional[int]:
+        method_name = "get_field_value_as_integer"
+        if self.is_pom_locator(locator):
+            assert parent is None, \
+                f"'parent' should be None in '{method_name}' but it is: {parent}. Locator: {locator}"
+            node = self.get_node(locator)
+            assert node.is_multiple is False, \
+                f"Node should not be multiple in '{method_name}'. " \
+                f"Should use 'get_field_values_as_integers'. Locator: {locator}. Node: {node}"
+            return node.get_field_value_as_integer()
+        else:
+            return self.default_get_field_value_as_integer(locator, parent)
+
+    @SeleniumLibrary.base.keyword
+    def get_field_values_as_integers(self,
+                                     locator: typing.Union[str, web_element, typing.List[web_element]],
+                                     parent: typing.Union[web_element, str, typing.List[str]] = None,
+                                     ) -> list:
+        method_name = "get_field_values_as_integers"
+        if self.is_pom_locator(locator):
+            assert parent is None, \
+                f"'parent' should be None in '{method_name}' but it is: {parent}. Locator: {locator}"
+            node = self.get_node(locator)
+            assert node.is_multiple, \
+                f"Node should be multiple in '{method_name}'. " \
+                f"Should use 'get_field_value_as_integer'. Locator: {locator}. Node: {node}"
+            return node.get_field_value_as_integer()
+        else:
+            return self.default_get_field_values_as_integers(locator, parent)
+
+    @SeleniumLibrary.base.keyword
+    def get_field_value_as_float(self,
+                                 locator: typing.Union[str, web_element],
+                                 parent: typing.Union[web_element, str, typing.List[str]] = None,
+                                 ) -> typing.Optional[float]:
+        method_name = "get_field_value_as_float"
+        if self.is_pom_locator(locator):
+            assert parent is None, \
+                f"'parent' should be None in '{method_name}' but it is: {parent}. Locator: {locator}"
+            node = self.get_node(locator)
+            assert node.is_multiple is False, \
+                f"Node should not be multiple in '{method_name}'. " \
+                f"Should use 'get_field_values_as_floats'. Locator: {locator}. Node: {node}"
+            return node.get_field_value_as_float()
+        else:
+            return self.default_get_field_value_as_float(locator, parent)
+
+    @SeleniumLibrary.base.keyword
+    def get_field_values_as_floats(self,
+                                   locator: typing.Union[str, web_element, typing.List[web_element]],
+                                   parent: typing.Union[web_element, str, typing.List[str]] = None,
+                                   ) -> list:
+        method_name = "get_field_values_as_floats"
+        if self.is_pom_locator(locator):
+            assert parent is None, \
+                f"'parent' should be None in '{method_name}' but it is: {parent}. Locator: {locator}"
+            node = self.get_node(locator)
+            assert node.is_multiple, \
+                f"Node should be multiple in '{method_name}'. " \
+                f"Should use 'get_field_value_as_float'. Locator: {locator}. Node: {node}"
+            return node.get_field_value_as_float()
+        else:
+            return self.default_get_field_values_as_floats(locator, parent)
+
+    @SeleniumLibrary.base.keyword
+    def get_field_value_as_boolean(self,
+                                   locator: typing.Union[str, web_element],
+                                   parent: typing.Union[web_element, str, typing.List[str]] = None,
+                                   ) -> typing.Optional[bool]:
+        method_name = "get_field_value_as_boolean"
+        if self.is_pom_locator(locator):
+            assert parent is None, \
+                f"'parent' should be None in '{method_name}' but it is: {parent}. Locator: {locator}"
+            node = self.get_node(locator)
+            assert node.is_multiple is False, \
+                f"Node should not be multiple in '{method_name}'. " \
+                f"Should use 'get_field_values_as_booleans'. Locator: {locator}. Node: {node}"
+            return node.get_field_value_as_boolean()
+        else:
+            return self.default_get_field_value_as_boolean(locator, parent)
+
+    @SeleniumLibrary.base.keyword
+    def get_field_values_as_booleans(self,
+                                     locator: typing.Union[str, web_element, typing.List[web_element]],
+                                     parent: typing.Union[web_element, str, typing.List[str]] = None,
+                                     ) -> list:
+        method_name = "get_field_values_as_booleans"
+        if self.is_pom_locator(locator):
+            assert parent is None, \
+                f"'parent' should be None in '{method_name}' but it is: {parent}. Locator: {locator}"
+            node = self.get_node(locator)
+            assert node.is_multiple, \
+                f"Node should be multiple in '{method_name}'. " \
+                f"Should use 'get_field_value_as_boolean'. Locator: {locator}. Node: {node}"
+            return node.get_field_value_as_boolean()
+        else:
+            return self.default_get_field_values_as_booleans(locator, parent)
+
+    @SeleniumLibrary.base.keyword
+    def get_field_value_as_date(self,
+                                locator: typing.Union[str, web_element],
+                                parent: typing.Union[web_element, str, typing.List[str]] = None,
+                                ) -> typing.Optional[datetime.date]:
+        method_name = "get_field_value_as_date"
+        if self.is_pom_locator(locator):
+            assert parent is None, \
+                f"'parent' should be None in '{method_name}' but it is: {parent}. Locator: {locator}"
+            node = self.get_node(locator)
+            assert node.is_multiple is False, \
+                f"Node should not be multiple in '{method_name}'. " \
+                f"Should use 'get_field_values_as_dates'. Locator: {locator}. Node: {node}"
+            return node.get_field_value_as_date()
+        else:
+            return self.default_get_field_value_as_date(locator, parent)
+
+    @SeleniumLibrary.base.keyword
+    def get_field_values_as_dates(self,
+                                  locator: typing.Union[str, web_element, typing.List[web_element]],
+                                  parent: typing.Union[web_element, str, typing.List[str]] = None,
+                                  ) -> list:
+        method_name = "get_field_values_as_dates"
+        if self.is_pom_locator(locator):
+            assert parent is None, \
+                f"'parent' should be None in '{method_name}' but it is: {parent}. Locator: {locator}"
+            node = self.get_node(locator)
+            assert node.is_multiple, \
+                f"Node should be multiple in '{method_name}'. " \
+                f"Should use 'get_field_value_as_date'. Locator: {locator}. Node: {node}"
+            return node.get_field_value_as_date()
+        else:
+            return self.default_get_field_values_as_dates(locator, parent)
+
+    @SeleniumLibrary.base.keyword
+    def get_field_value_as_datetime(self,
+                                    locator: typing.Union[str, web_element],
+                                    parent: typing.Union[web_element, str, typing.List[str]] = None,
+                                    ) -> typing.Optional[datetime.datetime]:
+        method_name = "get_field_value_as_datetime"
+        if self.is_pom_locator(locator):
+            assert parent is None, \
+                f"'parent' should be None in '{method_name}' but it is: {parent}. Locator: {locator}"
+            node = self.get_node(locator)
+            assert node.is_multiple is False, \
+                f"Node should not be multiple in '{method_name}'. " \
+                f"Should use 'get_field_values_as_datetimes'. Locator: {locator}. Node: {node}"
+            return node.get_field_value_as_datetime()
+        else:
+            return self.default_get_field_value_as_datetime(locator, parent)
+
+    @SeleniumLibrary.base.keyword
+    def get_field_values_as_datetimes(self,
+                                      locator: typing.Union[str, web_element, typing.List[web_element]],
+                                      parent: typing.Union[web_element, str, typing.List[str]] = None,
+                                      ) -> list:
+        method_name = "get_field_values_as_datetimes"
+        if self.is_pom_locator(locator):
+            assert parent is None, \
+                f"'parent' should be None in '{method_name}' but it is: {parent}. Locator: {locator}"
+            node = self.get_node(locator)
+            assert node.is_multiple, \
+                f"Node should be multiple in '{method_name}'. " \
+                f"Should use 'get_field_value_as_datetime'. Locator: {locator}. Node: {node}"
+            return node.get_field_value_as_datetime()
+        else:
+            return self.default_get_field_values_as_datetimes(locator, parent)
+
+    @SeleniumLibrary.base.keyword
+    def set_field_value(self,
+                        locator: typing.Union[str, web_element],
+                        parent: typing.Union[web_element, str, typing.List[str]] = None,
+                        value: typing.Any = None,
+                        force: bool = False,
+                        ) -> None:
+        if value is None:
+            return
+
+        method_name = "set_field_value"
+
+        if self.is_pom_locator(locator):
+            assert parent is None, \
+                f"'parent' should be None in '{method_name}' but it is: {parent}. Locator: {locator}"
+            node = self.get_node(locator)
+            assert node.is_multiple is False, \
+                f"Node should not be multiple in '{method_name}'. " \
+                f"Should use 'set_field_values'. Locator: {locator}. Node: {node}"
+            node.set_field_value(value, force=force)
+        else:
+            return self.default_set_field_value(locator, parent, value, force=force)
+
+    @SeleniumLibrary.base.keyword
+    def set_field_values(self,
+                         locator: typing.Union[str, web_element, typing.List[web_element]],
+                         parent: typing.Union[web_element, str, typing.List[str]] = None,
+                         values: typing.Optional[list] = None,
+                         force: bool = False,
+                         ) -> None:
+        if values is None or len(values) == 0:
+            return
+
+        method_name = "set_field_values"
+
+        if self.is_pom_locator(locator):
+            assert parent is None, \
+                f"'parent' should be None in '{method_name}' but it is: {parent}. Locator: {locator}"
+            node = self.get_node(locator)
+            assert node.is_multiple, \
+                f"Node should be multiple in '{method_name}'. " \
+                f"Should use 'set_field_value'. Locator: {locator}. Node: {node}"
+            return node.set_field_value(values, force=force)
+        else:
+            return self.default_set_field_values(locator, parent, values, force=force)
+
+    @SeleniumLibrary.base.keyword
     def default_get_field_value(self,
-                                locator: typing.Union[str, SeleniumLibrary.locators.elementfinder.WebElement],
-                                parent: typing.Union[SeleniumLibrary.locators.elementfinder.WebElement,
-                                                     str,
-                                                     typing.List[str]] = None,
+                                locator: typing.Union[str, web_element],
+                                parent: typing.Union[web_element, str, typing.List[str]] = None,
                                 ) -> typing.Union[None, str, bool]:
-        is_web_element = isinstance(locator, SeleniumLibrary.locators.elementfinder.WebElement)
+
+        is_web_element = isinstance(locator, web_element)
 
         if is_web_element:
             element = locator
@@ -772,14 +1072,10 @@ class Plugin(SeleniumLibrary.LibraryComponent):
 
     @SeleniumLibrary.base.keyword
     def default_get_field_values(self,
-                                 locator: typing.Union[str,
-                                                       SeleniumLibrary.locators.elementfinder.WebElement,
-                                                       typing.List[SeleniumLibrary.locators.elementfinder.WebElement]],
-                                 parent: typing.Union[SeleniumLibrary.locators.elementfinder.WebElement,
-                                                      str,
-                                                      typing.List[str]] = None,
+                                 locator: typing.Union[str, web_element, typing.List[web_element]],
+                                 parent: typing.Union[web_element, str, typing.List[str]] = None,
                                  ) -> list:
-        if isinstance(locator, SeleniumLibrary.locators.elementfinder.WebElement):
+        if isinstance(locator, web_element):
             locator = [locator]
         is_web_element_list = isinstance(locator, list)
 
@@ -802,52 +1098,82 @@ class Plugin(SeleniumLibrary.LibraryComponent):
 
     @SeleniumLibrary.base.keyword
     def default_get_field_value_as_string(self,
-                                          locator: typing.Union[str, SeleniumLibrary.locators.elementfinder.WebElement],
-                                          parent: typing.Union[SeleniumLibrary.locators.elementfinder.WebElement,
-                                                               str,
-                                                               typing.List[str]] = None,
+                                          locator: typing.Union[str, web_element],
+                                          parent: typing.Union[web_element, str, typing.List[str]] = None,
                                           ) -> typing.Optional[str]:
-        value = self.default_get_field_value(locator, parent=parent)
+        value = self.get_field_value(locator, parent=parent)
         if value is None:
             return None
         else:
             return str(value)
 
     @SeleniumLibrary.base.keyword
+    def default_get_field_values_as_strings(self,
+                                            locator: typing.Union[str, web_element, typing.List[web_element]],
+                                            parent: typing.Union[web_element, str, typing.List[str]] = None,
+                                            ) -> typing.List[None, str]:
+        values = []
+        for value in self.get_field_values(locator, parent=parent):
+            if value is None:
+                values.append(None)
+            else:
+                values.append(str(value))
+        return values
+
+    @SeleniumLibrary.base.keyword
     def default_get_field_value_as_integer(self,
-                                           locator: typing.Union[
-                                               str, SeleniumLibrary.locators.elementfinder.WebElement],
-                                           parent: typing.Union[SeleniumLibrary.locators.elementfinder.WebElement,
-                                                                str,
-                                                                typing.List[str]] = None,
+                                           locator: typing.Union[str, web_element],
+                                           parent: typing.Union[web_element, str, typing.List[str]] = None,
                                            ) -> typing.Optional[int]:
-        value = self.default_get_field_value(locator, parent=parent)
+        value = self.get_field_value(locator, parent=parent)
         if value is None:
             return None
         else:
             return int(value)
 
     @SeleniumLibrary.base.keyword
+    def default_get_field_values_as_integers(self,
+                                             locator: typing.Union[str, web_element, typing.List[web_element]],
+                                             parent: typing.Union[web_element, str, typing.List[str]] = None,
+                                             ) -> typing.List[None, int]:
+        values = []
+        for value in self.get_field_values(locator, parent=parent):
+            if value is None:
+                values.append(None)
+            else:
+                values.append(int(value))
+        return values
+
+    @SeleniumLibrary.base.keyword
     def default_get_field_value_as_float(self,
-                                         locator: typing.Union[str, SeleniumLibrary.locators.elementfinder.WebElement],
-                                         parent: typing.Union[SeleniumLibrary.locators.elementfinder.WebElement,
-                                                              str,
-                                                              typing.List[str]] = None,
+                                         locator: typing.Union[str, web_element],
+                                         parent: typing.Union[web_element, str, typing.List[str]] = None,
                                          ) -> typing.Optional[float]:
-        value = self.default_get_field_value(locator, parent=parent)
+        value = self.get_field_value(locator, parent=parent)
         if value is None:
             return None
         else:
             return float(value)
 
     @SeleniumLibrary.base.keyword
-    def default_get_field_value_as_bool(self,
-                                        locator: typing.Union[str, SeleniumLibrary.locators.elementfinder.WebElement],
-                                        parent: typing.Union[SeleniumLibrary.locators.elementfinder.WebElement,
-                                                             str,
-                                                             typing.List[str]] = None,
-                                        ) -> typing.Optional[bool]:
-        value = self.default_get_field_value(locator, parent=parent)
+    def default_get_field_values_as_floats(self,
+                                           locator: typing.Union[str, web_element, typing.List[web_element]],
+                                           parent: typing.Union[web_element, str, typing.List[str]] = None,
+                                           ) -> typing.List[None, float]:
+        values = []
+        for value in self.get_field_values(locator, parent=parent):
+            if value is None:
+                values.append(None)
+            else:
+                values.append(float(value))
+        return values
+
+    @SeleniumLibrary.base.keyword
+    def default_get_field_value_as_boolean(self,
+                                           locator: typing.Union[str, web_element],
+                                           parent: typing.Union[web_element, str, typing.List[str]] = None,
+                                           ) -> typing.Optional[bool]:
+        value = self.get_field_value(locator, parent=parent)
         if value is None:
             return None
         elif self.is_pseudo_boolean(value):
@@ -856,13 +1182,26 @@ class Plugin(SeleniumLibrary.LibraryComponent):
             return bool(value)
 
     @SeleniumLibrary.base.keyword
+    def default_get_field_values_as_booleans(self,
+                                             locator: typing.Union[str, web_element, typing.List[web_element]],
+                                             parent: typing.Union[web_element, str, typing.List[str]] = None,
+                                             ) -> typing.List[None, bool]:
+        values = []
+        for value in self.get_field_values(locator, parent=parent):
+            if value is None:
+                values.append(None)
+            elif self.is_pseudo_boolean(value):
+                values.append(self.pseudo_boolean_as_bool(value))
+            else:
+                values.append(bool(value))
+        return values
+
+    @SeleniumLibrary.base.keyword
     def default_get_field_value_as_date(self,
-                                        locator: typing.Union[str, SeleniumLibrary.locators.elementfinder.WebElement],
-                                        parent: typing.Union[SeleniumLibrary.locators.elementfinder.WebElement,
-                                                             str,
-                                                             typing.List[str]] = None,
+                                        locator: typing.Union[str, web_element],
+                                        parent: typing.Union[web_element, str, typing.List[str]] = None,
                                         ) -> typing.Optional[datetime.date]:
-        value = self.default_get_field_value(locator, parent=parent)
+        value = self.get_field_value(locator, parent=parent)
         if value is None:
             return None
         elif isinstance(value, str):
@@ -875,97 +1214,120 @@ class Plugin(SeleniumLibrary.LibraryComponent):
             assert False, f"Do not know how to convert to Date: {value}"
 
     @SeleniumLibrary.base.keyword
+    def default_get_field_values_as_dates(self,
+                                          locator: typing.Union[str, web_element, typing.List[web_element]],
+                                          parent: typing.Union[web_element, str, typing.List[str]] = None,
+                                          ) -> typing.List[None, datetime.date]:
+        values = []
+        for value in self.get_field_values(locator, parent=parent):
+            if value is None:
+                values.append(None)
+            elif isinstance(value, str):
+                values.append(Plugin.default_date_parser(value))
+            elif isinstance(value, (tuple, list, set)):
+                values.append(datetime.date(*value))
+            elif isinstance(value, dict):
+                values.append(datetime.date(**value))
+            else:
+                assert False, f"Do not know how to convert to Date: {value}"
+        return values
+
+    @SeleniumLibrary.base.keyword
     def default_get_field_value_as_datetime(self,
-                                            locator: typing.Union[
-                                                str, SeleniumLibrary.locators.elementfinder.WebElement],
-                                            parent: typing.Union[SeleniumLibrary.locators.elementfinder.WebElement,
-                                                                 str,
-                                                                 typing.List[str]] = None,
+                                            locator: typing.Union[str, web_element],
+                                            parent: typing.Union[web_element, str, typing.List[str]] = None,
                                             ) -> typing.Optional[datetime.datetime]:
-        value = self.default_get_field_value(locator, parent=parent)
+        value = self.get_field_value(locator, parent=parent)
         if value is None:
             return None
         elif isinstance(value, str):
             return Plugin.default_datetime_parser(value)
         elif isinstance(value, (tuple, list, set)):
-            return datetime.date(*value)
+            return datetime.datetime(*value)
         elif isinstance(value, dict):
-            return datetime.date(**value)
+            return datetime.datetime(**value)
         else:
             assert False, f"Do not know how to convert to Datetime: {value}"
 
     @SeleniumLibrary.base.keyword
-    def convert_value_to_pseudo_type(self, value, pseudo_type):
-        if pseudo_type is None:
-            return value
-        pseudo_type = self.pseudo_type_as_type(pseudo_type)
-
-        if isinstance(value, typing.Iterable) and pseudo_type in [datetime.date, datetime.datetime]:
-            # Very special case: date-datetime with Iterable value
-            try:
-                return pseudo_type(tuple(value))
-            except TypeError:
-                pass
-            except ValueError:
-                pass
-
-        if isinstance(value, (list, tuple, set)):
-            return type(value)([self.convert_value_to_pseudo_type(v, pseudo_type) for v in value])
-        elif isinstance(value, dict):
-            # noinspection PyArgumentList
-            return type(value)({key: self.convert_value_to_pseudo_type(v, pseudo_type) for key, v in value.items()})
-        assert not isinstance(value, typing.Iterable) or isinstance(value, str), \
-            f"'convert_value_to_pseudo_type'. Unexpected Iterable type: {type(value)}. Value: {value}"
-
-        if pseudo_type in [datetime.date, datetime.datetime] and isinstance(value, str):
-            if pseudo_type == datetime.datetime:
-                return Plugin.default_datetime_parser(value)
+    def default_get_field_values_as_datetimes(self,
+                                              locator: typing.Union[str, web_element, typing.List[web_element]],
+                                              parent: typing.Union[web_element, str, typing.List[str]] = None,
+                                              ) -> typing.List[None, datetime.datetime]:
+        values = []
+        for value in self.get_field_values(locator, parent=parent):
+            if value is None:
+                values.append(None)
+            elif isinstance(value, str):
+                values.append(Plugin.default_datetime_parser(value))
+            elif isinstance(value, (tuple, list, set)):
+                values.append(datetime.datetime(*value))
+            elif isinstance(value, dict):
+                values.append(datetime.datetime(**value))
             else:
-                return Plugin.default_date_parser(value)
-        else:
-            # pseudo_type in [str, bool, int, float]:
-            return pseudo_type(value)
+                assert False, f"Do not know how to convert to Datetime: {value}"
+        return values
 
     @SeleniumLibrary.base.keyword
-    def default_set_field_value(self, locator, value: typing.Any, force: bool = False, **kwargs) -> None:
-        if len(kwargs) > 0:
-            self.built_in.log(f"'default_get_field_value'. Ignored 'kwargs': {kwargs}")
+    def default_set_field_value(self,
+                                locator: typing.Union[str, web_element],
+                                parent: typing.Union[web_element, str, typing.List[str]] = None,
+                                value: typing.Any = None,
+                                force: bool = False,
+                                ) -> None:
         if value is None:
             return
 
-        self.find_element(locator, required=True)
-        if self.element_is_button(locator):
+        is_web_element = isinstance(locator, web_element)
+
+        if is_web_element:
+            element = locator
+        else:
+            if isinstance(parent, str):
+                parent = [parent]
+            if isinstance(parent, list):
+                parent_element = None
+                for p in parent:
+                    parent_element = self.find_element(p, required=False, parent=parent_element)
+                    if parent_element is None:
+                        return None
+                parent = parent_element
+
+            element = self.find_element(locator, required=False, parent=parent)
+
+        if self.element_is_button(element):
             value = self.pseudo_boolean_as_bool(value)
             if value is True:
-                self.click_button(locator)
-        elif self.element_is_checkbox(locator):
+                self.click_button(element)
+        elif self.element_is_checkbox(element):
             value = self.pseudo_boolean_as_bool(value)
             if value is True:
-                SeleniumLibrary.FormElementKeywords(self.ctx).select_checkbox(locator)
+                SeleniumLibrary.FormElementKeywords(self.ctx).select_checkbox(element)
             else:
-                SeleniumLibrary.FormElementKeywords(self.ctx).unselect_checkbox(locator)
-        elif self.element_is_image(locator):
+                SeleniumLibrary.FormElementKeywords(self.ctx).unselect_checkbox(element)
+        elif self.element_is_image(element):
             value = self.pseudo_boolean_as_bool(value)
             if value is True:
-                self.click_image(locator)
-        elif self.element_is_link(locator):
+                self.click_image(element)
+        elif self.element_is_link(element):
             value = self.pseudo_boolean_as_bool(value)
             if value is True:
-                self.click_link(locator)
-        elif self.element_is_list(locator):
+                self.click_link(element)
+        elif self.element_is_list(element):
             if not isinstance(value, list):
                 value = [value]
             try:
+                # noinspection PyTypeChecker
                 value = [int(v) for v in value]
             except ValueError:
-                self.select_from_list_by_label(locator, *value)
+                self.select_from_list_by_label(element, *value)
             else:
-                self.select_from_list_by_index(locator, *value)
-        elif self.element_is_radio(locator):
+                self.select_from_list_by_index(element, *value)
+        elif self.element_is_radio(element):
             value = self.pseudo_boolean_as_bool(value)
             # get element group name
-            group_name = SeleniumLibrary.ElementKeywords(self.ctx).get_element_attribute(locator, "name")
-            radio_value = SeleniumLibrary.ElementKeywords(self.ctx).get_element_attribute(locator, "value")
+            group_name = SeleniumLibrary.ElementKeywords(self.ctx).get_element_attribute(element, "name")
+            radio_value = SeleniumLibrary.ElementKeywords(self.ctx).get_element_attribute(element, "value")
             if value is True:
                 if force or \
                         self.built_in.run_keyword_and_return_status(
@@ -974,15 +1336,44 @@ class Plugin(SeleniumLibrary.LibraryComponent):
                             radio_value,
                         ):
                     self.select_radio_button(group_name, radio_value)
-        elif self.element_is_textfield(locator):
+        elif self.element_is_textfield(element):
             element_type = SeleniumLibrary.ElementKeywords(self.ctx).get_element_attribute("type")
             if isinstance(element_type, str) and element_type.lower() == "password":
-                self.input_password(str(value))
+                self.input_password(element, str(value))
             else:
-                self.input_text(str(value))
+                self.input_text(element, str(value))
         else:
             # It will probably generate an error, but have to try...
-            self.input_text(str(value))
+            self.input_text(element, str(value))
+
+    @SeleniumLibrary.base.keyword
+    def default_set_field_values(self,
+                                 locator: typing.Union[str, web_element, typing.List[web_element]],
+                                 parent: typing.Union[web_element, str, typing.List[str]] = None,
+                                 values: typing.Optional[list] = None,
+                                 force: bool = False,
+                                 ) -> None:
+        if values is None or len(values) == 0:
+            return
+
+        if isinstance(locator, web_element):
+            locator = [locator]
+        is_web_element_list = isinstance(locator, list)
+
+        if is_web_element_list:
+            elements = locator
+        else:
+            if isinstance(parent, str):
+                parent = [parent]
+            if isinstance(parent, list):
+                parent_element = None
+                for p in parent:
+                    parent_element = self.find_element(p, required=True, parent=parent_element)
+                parent = parent_element
+            elements = self.find_elements(locator, parent=parent)
+
+        for i, element in enumerate(elements):
+            self.set_field_value(element, value=values[i], force=force)
 
     ###############################################
     # SELENIUM OVERRIDES  (and auxiliary methods) #
@@ -1007,7 +1398,7 @@ class Plugin(SeleniumLibrary.LibraryComponent):
         return locator_desc
 
     @SeleniumLibrary.base.keyword
-    def get_current_frame(self) -> SeleniumLibrary.locators.elementfinder.WebElement:
+    def get_current_frame(self) -> web_element:
         return self.driver.execute_script('return window.frameElement')
 
     def embed_screenshot(self, kw: str, locator=None, moment: str = "before") -> None:

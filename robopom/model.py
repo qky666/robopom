@@ -770,3 +770,27 @@ class Node(anytree.AnyNode):
 
     def is_textfield(self) -> typing.Optional[bool]:
         return self.get_plugin().element_is_textfield(self.pom_locator)
+
+    def get_field_value(self, **kwargs) -> typing.Any:
+        return self.get_page_library().get_field_value(self, **kwargs)
+
+    def get_field_value_as_string(self, **kwargs) -> typing.Any:
+        return self.get_page_library().get_field_value_as_string(self, **kwargs)
+
+    def get_field_value_as_integer(self, **kwargs) -> typing.Any:
+        return self.get_page_library().get_field_value_as_integer(self, **kwargs)
+
+    def get_field_value_as_float(self, **kwargs) -> typing.Any:
+        return self.get_page_library().get_field_value_as_float(self, **kwargs)
+
+    def get_field_value_as_boolean(self, **kwargs) -> typing.Any:
+        return self.get_page_library().get_field_value_as_boolean(self, **kwargs)
+
+    def get_field_value_as_date(self, **kwargs) -> typing.Any:
+        return self.get_page_library().get_field_value_as_date(self, **kwargs)
+
+    def get_field_value_as_datetime(self, **kwargs) -> typing.Any:
+        return self.get_page_library().get_field_value_as_datetime(self, **kwargs)
+
+    def set_field_value(self, value: typing.Any = None, force: bool = False, **kwargs) -> typing.Any:
+        return self.get_page_library().set_field_value(self, value, force=force, **kwargs)

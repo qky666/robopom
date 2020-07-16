@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 import typing
 import os
+import datetime
 import pathlib
 import re
 import inspect
@@ -281,7 +283,7 @@ class Page:
             value.append(self.parent_page_name)
             return value
 
-    def ancestor_pages_libs(self) -> typing.List[Page]:
+    def ancestor_pages_libraries(self) -> typing.List[Page]:
         """
         Returns the list of names of all the `ancestors` pages (starting from `root`).
 
@@ -290,25 +292,11 @@ class Page:
         return [Plugin.Plugin.built_in.get_library_instance(name) for name in self.ancestor_pages_names()]
 
     @robot_deco.keyword
-    def get_page_name(self) -> str:
-        """
-        Returns the name of the page.
-        """
-        return self.name
-
-    @robot_deco.keyword
     def get_page_node(self) -> model.Node:
         """
         Returns the `page object` of this page.
         """
         return self.get_robopom_plugin().get_node(self.name)
-
-    @robot_deco.keyword
-    def get_model_file(self) -> typing.Optional[os.PathLike]:
-        """
-        Returns the file path of the YAML model file. If page has no model file associated, it returns 'None'.
-        """
-        return self.model_file
 
     @robot_deco.keyword(types=[str])
     def get_node(self, name: str) -> model.Node:
@@ -317,6 +305,7 @@ class Page:
 
         Parameter `path` can be a real path, or a `short`.
         """
+        name = Plugin.Plugin.remove_pom_prefix(name)
         return self.get_page_node().find_node(name)
 
     @robot_deco.keyword(types=[str])
@@ -421,7 +410,7 @@ class Page:
 
     def get_node_from_file(self) -> model.Node:
         ancestor_node: typing.Optional[model.Node] = None
-        for ancestor_page_lib in self.ancestor_pages_libs():
+        for ancestor_page_lib in self.ancestor_pages_libraries():
             if ancestor_page_lib.model_file is not None:
                 current_node = Plugin.Plugin.get_node_from_file(ancestor_page_lib.model_file)
             else:
@@ -472,6 +461,7 @@ class Page:
     def get_custom_get_set_keyword(self,
                                    element: typing.Union[model.Node, str],
                                    get_set: str = "Get",
+                                   suffix: str = "",
                                    ) -> typing.Optional[str]:
         get_set = get_set.capitalize()
         assert get_set in ["Get", "Set"], f"'get_set' must be 'Get' or 'Set', but it is: {get_set}"
@@ -479,7 +469,7 @@ class Page:
         if isinstance(element, str):
             element = self.get_node(element)
         aliases = element.aliases()
-        possible_keywords = [f"{self.name}.{get_set} {alias}" for alias in aliases]
+        possible_keywords = [f"{self.name}.{get_set} {alias} {suffix}".strip() for alias in aliases]
         keywords = [keyword for keyword in possible_keywords if self.get_robopom_plugin().keyword_exists(keyword)]
         assert len(keywords) <= 1, f"Found more than one {get_set} keyword for '{element.full_name}': {keywords}"
         if len(keywords) == 1:
@@ -487,31 +477,128 @@ class Page:
         else:
             return None
 
-    @robot_deco.keyword(types=[typing.Union[str, model.Node], str])
+    @robot_deco.keyword(types=[typing.Union[str, model.Node]])
     def get_field_value(self,
-                        element: typing.Union[str, model.Node, str],
-                        pseudo_type: str = None,
+                        element: typing.Union[str, model.Node],
                         **kwargs,
                         ) -> typing.Any:
         custom_keyword = self.get_custom_get_set_keyword(element, get_set="Get")
         if custom_keyword is not None:
-            return self.get_robopom_plugin().built_in.run_keyword(custom_keyword, pseudo_type, **kwargs)
+            return self.get_robopom_plugin().built_in.run_keyword(custom_keyword, **kwargs)
         else:
             if isinstance(element, str):
                 element = self.get_node(element)
             if element.is_multiple:
-                nodes = element.get_multiple_nodes()
-                return [self.get_robopom_plugin().default_get_field_value(node.pom_locator, pseudo_type, **kwargs)
-                        for node in nodes]
+                return self.get_robopom_plugin().default_get_field_values(element.pom_locator)
             else:
-                return self.get_robopom_plugin().default_get_field_value(element.pom_locator, pseudo_type, **kwargs)
+                return self.get_robopom_plugin().default_get_field_value(element.pom_locator)
 
-    @robot_deco.keyword(types=[typing.Union[str, model.Node], None])
+    @robot_deco.keyword(types=[typing.Union[str, model.Node]])
+    def get_field_value_as_string(self,
+                                  element: typing.Union[str, model.Node],
+                                  **kwargs,
+                                  ) -> typing.Union[None, str, typing.List[None, str]]:
+        custom_keyword = self.get_custom_get_set_keyword(element, get_set="Get", suffix="As String")
+        if custom_keyword is not None:
+            return self.get_robopom_plugin().built_in.run_keyword(custom_keyword, **kwargs)
+        else:
+            if isinstance(element, str):
+                element = self.get_node(element)
+            if element.is_multiple:
+                return self.get_robopom_plugin().default_get_field_values_as_strings(element.pom_locator)
+            else:
+                return self.get_robopom_plugin().default_get_field_value_as_string(element.pom_locator)
+
+    @robot_deco.keyword(types=[typing.Union[str, model.Node]])
+    def get_field_value_as_integer(self,
+                                   element: typing.Union[str, model.Node],
+                                   **kwargs,
+                                   ) -> typing.Union[None, int, typing.List[None, int]]:
+        custom_keyword = self.get_custom_get_set_keyword(element, get_set="Get", suffix="As Integer")
+        if custom_keyword is not None:
+            return self.get_robopom_plugin().built_in.run_keyword(custom_keyword, **kwargs)
+        else:
+            if isinstance(element, str):
+                element = self.get_node(element)
+            if element.is_multiple:
+                return self.get_robopom_plugin().default_get_field_values_as_integers(element.pom_locator)
+            else:
+                return self.get_robopom_plugin().default_get_field_value_as_integer(element.pom_locator)
+
+    @robot_deco.keyword(types=[typing.Union[str, model.Node]])
+    def get_field_value_as_float(self,
+                                 element: typing.Union[str, model.Node],
+                                 **kwargs,
+                                 ) -> typing.Union[None, float, typing.List[None, float]]:
+        custom_keyword = self.get_custom_get_set_keyword(element, get_set="Get", suffix="As Float")
+        if custom_keyword is not None:
+            return self.get_robopom_plugin().built_in.run_keyword(custom_keyword, **kwargs)
+        else:
+            if isinstance(element, str):
+                element = self.get_node(element)
+            if element.is_multiple:
+                return self.get_robopom_plugin().default_get_field_values_as_floats(element.pom_locator)
+            else:
+                return self.get_robopom_plugin().default_get_field_value_as_float(element.pom_locator)
+
+    @robot_deco.keyword(types=[typing.Union[str, model.Node]])
+    def get_field_value_as_boolean(self,
+                                   element: typing.Union[str, model.Node],
+                                   **kwargs,
+                                   ) -> typing.Union[None, bool, typing.List[None, bool]]:
+        custom_keyword = self.get_custom_get_set_keyword(element, get_set="Get", suffix="As Boolean")
+        if custom_keyword is not None:
+            return self.get_robopom_plugin().built_in.run_keyword(custom_keyword, **kwargs)
+        else:
+            if isinstance(element, str):
+                element = self.get_node(element)
+            if element.is_multiple:
+                return self.get_robopom_plugin().default_get_field_values_as_booleans(element.pom_locator)
+            else:
+                return self.get_robopom_plugin().default_get_field_value_as_boolean(element.pom_locator)
+
+    @robot_deco.keyword(types=[typing.Union[str, model.Node]])
+    def get_field_value_as_date(self,
+                                element: typing.Union[str, model.Node],
+                                **kwargs,
+                                ) -> typing.Union[None, datetime.date, typing.List[None, datetime.date]]:
+        custom_keyword = self.get_custom_get_set_keyword(element, get_set="Get", suffix="As Date")
+        if custom_keyword is not None:
+            return self.get_robopom_plugin().built_in.run_keyword(custom_keyword, **kwargs)
+        else:
+            if isinstance(element, str):
+                element = self.get_node(element)
+            if element.is_multiple:
+                return self.get_robopom_plugin().default_get_field_values_as_dates(element.pom_locator)
+            else:
+                return self.get_robopom_plugin().default_get_field_value_as_date(element.pom_locator)
+
+    @robot_deco.keyword(types=[typing.Union[str, model.Node]])
+    def get_field_value_as_datetime(self,
+                                    element: typing.Union[str, model.Node],
+                                    **kwargs,
+                                    ) -> typing.Union[None, datetime.datetime, typing.List[None, datetime.datetime]]:
+        custom_keyword = self.get_custom_get_set_keyword(element, get_set="Get", suffix="As Datetime")
+        if custom_keyword is not None:
+            return self.get_robopom_plugin().built_in.run_keyword(custom_keyword, **kwargs)
+        else:
+            if isinstance(element, str):
+                element = self.get_node(element)
+            if element.is_multiple:
+                return self.get_robopom_plugin().default_get_field_values_as_datetimes(element.pom_locator)
+            else:
+                return self.get_robopom_plugin().default_get_field_value_as_datetime(element.pom_locator)
+
+    @robot_deco.keyword(types=[typing.Union[str, model.Node], None, bool])
     def set_field_value(self,
                         element: typing.Union[str, model.Node],
                         value: typing.Any = None,
                         force: bool = False,
-                        **kwargs, ) -> None:
+                        **kwargs,
+                        ) -> None:
+        if value is None:
+            return
+
         custom_keyword = self.get_custom_get_set_keyword(element, get_set="Set")
         if custom_keyword is not None:
             self.get_robopom_plugin().built_in.run_keyword(custom_keyword, value, force, **kwargs)
@@ -520,14 +607,12 @@ class Page:
             if isinstance(element, str):
                 element = self.get_node(element)
             if element.is_multiple:
-                nodes = element.get_multiple_nodes()
                 if not isinstance(value, list):
                     value = [value]
-                for i, v in enumerate(value):
-                    self.get_robopom_plugin().default_set_field_value(nodes[i].pom_locator, v, force, **kwargs)
+                self.get_robopom_plugin().default_set_field_values(element.pom_locator, values=value, force=force)
                 return
             else:
-                self.get_robopom_plugin().default_set_field_value(element.pom_locator, value, force, **kwargs)
+                self.get_robopom_plugin().default_set_field_value(element.pom_locator, value=value, force=force)
 
     @robot_deco.keyword(types=[typing.Union[str, model.PageElement], None])
     def compare_equals(self,
