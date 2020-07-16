@@ -4,6 +4,7 @@ import datetime
 import dateutil.parser
 import os
 import pathlib
+import time
 import SeleniumLibrary
 import robot.libraries.BuiltIn
 import anytree.importer
@@ -60,6 +61,19 @@ class Plugin(SeleniumLibrary.LibraryComponent):
         "No".casefold(): False,
         0: False,
     }
+
+    @staticmethod
+    def default_datetime_parser(value: str, dayfirst: bool = True) -> datetime.datetime:
+        return dateutil.parser.parse(value, dateutil.parser.parserinfo(dayfirst=dayfirst))
+
+    @staticmethod
+    def default_date_parser(value: str, dayfirst: bool = True) -> datetime.date:
+        dt = Plugin.default_datetime_parser(value, dayfirst=dayfirst)
+        return datetime.date(dt.year, dt.month, dt.day)
+
+    @classmethod
+    def is_pom_locator(cls, locator: typing.Any) -> bool:
+        return isinstance(locator, str) and locator.startswith(tuple(cls.POM_LOCATOR_PREFIXES))
 
     @classmethod
     def is_pseudo_boolean(cls, value) -> bool:
@@ -146,6 +160,42 @@ class Plugin(SeleniumLibrary.LibraryComponent):
             f"Error in 'get_selenium_library_name'. There should be ony one library candidate, " \
             f"but candidates are: {candidates}"
         return list(candidates.keys())[0]
+
+    def wait_until(self,
+                   timeout: typing.Union[int, float] = None,
+                   expected: typing.Any = True,
+                   raise_error: bool = True,
+                   error: str = None,
+                   poll: typing.Union[int, float] = 0.2,
+                   callable: typing.Callable = None,
+                   args: list = None,
+                   kwargs: dict = None, ) -> bool:
+        if timeout is None:
+            timeout = self.selenium_library.timeout
+        if args is None:
+            args = []
+        if kwargs is None:
+            kwargs = {}
+
+        value = callable(*args, **kwargs)
+        while timeout >= 0:
+            if value == expected:
+                break
+            time.sleep(poll)
+            timeout -= poll
+            value = callable(*args, **kwargs)
+        else:
+            # Condition not met
+            if error is None:
+                error = f"Timeout ({timeout}) in 'wait_until': callable: {callable}, args: {args}, " \
+                        f"kwargs: {kwargs}, expected: {expected}, raise_error: {raise_error}. " \
+                        f"Last value obtained: {value}"
+            if raise_error is True:
+                assert False, error
+            else:
+                self.built_in.log(error)
+                return False
+        return True
 
     @SeleniumLibrary.base.keyword
     def keyword_exists(self, kw: str) -> bool:
@@ -677,14 +727,28 @@ class Plugin(SeleniumLibrary.LibraryComponent):
     # Get / Set Field Value
     @SeleniumLibrary.base.keyword
     def default_get_field_value(self,
-                                locator,
-                                pseudo_type=None,
-                                **kwargs,
-                                ) -> typing.Union[None, str, bool, int, float, datetime.date, datetime.datetime]:
-        if len(kwargs) > 0:
-            self.built_in.log(f"'default_get_field_value'. Ignored 'kwargs': {kwargs}")
+                                locator: typing.Union[str, SeleniumLibrary.locators.elementfinder.WebElement],
+                                parent: typing.Union[SeleniumLibrary.locators.elementfinder.WebElement,
+                                                     str,
+                                                     typing.List[str]] = None,
+                                ) -> typing.Union[None, str, bool]:
+        is_web_element = isinstance(locator, SeleniumLibrary.locators.elementfinder.WebElement)
 
-        element = self.find_element(locator, required=False)
+        if is_web_element:
+            element = locator
+        else:
+            if isinstance(parent, str):
+                parent = [parent]
+            if isinstance(parent, list):
+                parent_element = None
+                for p in parent:
+                    parent_element = self.find_element(p, required=False, parent=parent_element)
+                    if parent_element is None:
+                        return None
+                parent = parent_element
+
+            element = self.find_element(locator, required=False, parent=parent)
+
         if element is None:
             value = None
         elif self.element_is_checkbox(locator):
@@ -704,7 +768,131 @@ class Plugin(SeleniumLibrary.LibraryComponent):
         else:
             value = SeleniumLibrary.ElementKeywords(self.ctx).get_text(locator)
 
-        return self.convert_value_to_pseudo_type(value, pseudo_type)
+        return value
+
+    @SeleniumLibrary.base.keyword
+    def default_get_field_values(self,
+                                 locator: typing.Union[str,
+                                                       SeleniumLibrary.locators.elementfinder.WebElement,
+                                                       typing.List[SeleniumLibrary.locators.elementfinder.WebElement]],
+                                 parent: typing.Union[SeleniumLibrary.locators.elementfinder.WebElement,
+                                                      str,
+                                                      typing.List[str]] = None,
+                                 ) -> list:
+        if isinstance(locator, SeleniumLibrary.locators.elementfinder.WebElement):
+            locator = [locator]
+        is_web_element_list = isinstance(locator, list)
+
+        if is_web_element_list:
+            elements = locator
+        else:
+            if isinstance(parent, str):
+                parent = [parent]
+            if isinstance(parent, list):
+                parent_element = None
+                for p in parent:
+                    parent_element = self.find_element(p, required=False, parent=parent_element)
+                    if parent_element is None:
+                        return []
+                parent = parent_element
+
+            elements = self.find_elements(locator, parent=parent)
+
+        return [self.default_get_field_value(element) for element in elements]
+
+    @SeleniumLibrary.base.keyword
+    def default_get_field_value_as_string(self,
+                                          locator: typing.Union[str, SeleniumLibrary.locators.elementfinder.WebElement],
+                                          parent: typing.Union[SeleniumLibrary.locators.elementfinder.WebElement,
+                                                               str,
+                                                               typing.List[str]] = None,
+                                          ) -> typing.Optional[str]:
+        value = self.default_get_field_value(locator, parent=parent)
+        if value is None:
+            return None
+        else:
+            return str(value)
+
+    @SeleniumLibrary.base.keyword
+    def default_get_field_value_as_integer(self,
+                                           locator: typing.Union[
+                                               str, SeleniumLibrary.locators.elementfinder.WebElement],
+                                           parent: typing.Union[SeleniumLibrary.locators.elementfinder.WebElement,
+                                                                str,
+                                                                typing.List[str]] = None,
+                                           ) -> typing.Optional[int]:
+        value = self.default_get_field_value(locator, parent=parent)
+        if value is None:
+            return None
+        else:
+            return int(value)
+
+    @SeleniumLibrary.base.keyword
+    def default_get_field_value_as_float(self,
+                                         locator: typing.Union[str, SeleniumLibrary.locators.elementfinder.WebElement],
+                                         parent: typing.Union[SeleniumLibrary.locators.elementfinder.WebElement,
+                                                              str,
+                                                              typing.List[str]] = None,
+                                         ) -> typing.Optional[float]:
+        value = self.default_get_field_value(locator, parent=parent)
+        if value is None:
+            return None
+        else:
+            return float(value)
+
+    @SeleniumLibrary.base.keyword
+    def default_get_field_value_as_bool(self,
+                                        locator: typing.Union[str, SeleniumLibrary.locators.elementfinder.WebElement],
+                                        parent: typing.Union[SeleniumLibrary.locators.elementfinder.WebElement,
+                                                             str,
+                                                             typing.List[str]] = None,
+                                        ) -> typing.Optional[bool]:
+        value = self.default_get_field_value(locator, parent=parent)
+        if value is None:
+            return None
+        elif self.is_pseudo_boolean(value):
+            return self.pseudo_boolean_as_bool(value)
+        else:
+            return bool(value)
+
+    @SeleniumLibrary.base.keyword
+    def default_get_field_value_as_date(self,
+                                        locator: typing.Union[str, SeleniumLibrary.locators.elementfinder.WebElement],
+                                        parent: typing.Union[SeleniumLibrary.locators.elementfinder.WebElement,
+                                                             str,
+                                                             typing.List[str]] = None,
+                                        ) -> typing.Optional[datetime.date]:
+        value = self.default_get_field_value(locator, parent=parent)
+        if value is None:
+            return None
+        elif isinstance(value, str):
+            return Plugin.default_date_parser(value)
+        elif isinstance(value, (tuple, list, set)):
+            return datetime.date(*value)
+        elif isinstance(value, dict):
+            return datetime.date(**value)
+        else:
+            assert False, f"Do not know how to convert to Date: {value}"
+
+    @SeleniumLibrary.base.keyword
+    def default_get_field_value_as_datetime(self,
+                                            locator: typing.Union[
+                                                str, SeleniumLibrary.locators.elementfinder.WebElement],
+                                            parent: typing.Union[SeleniumLibrary.locators.elementfinder.WebElement,
+                                                                 str,
+                                                                 typing.List[str]] = None,
+                                            ) -> typing.Optional[datetime.datetime]:
+        value = self.default_get_field_value(locator, parent=parent)
+        if value is None:
+            return None
+        elif isinstance(value, str):
+            return Plugin.default_datetime_parser(value)
+        elif isinstance(value, (tuple, list, set)):
+            return datetime.date(*value)
+        elif isinstance(value, dict):
+            return datetime.date(**value)
+        else:
+            assert False, f"Do not know how to convert to Datetime: {value}"
 
     @SeleniumLibrary.base.keyword
     def convert_value_to_pseudo_type(self, value, pseudo_type):
@@ -730,11 +918,10 @@ class Plugin(SeleniumLibrary.LibraryComponent):
             f"'convert_value_to_pseudo_type'. Unexpected Iterable type: {type(value)}. Value: {value}"
 
         if pseudo_type in [datetime.date, datetime.datetime] and isinstance(value, str):
-            dt = dateutil.parser.parse(value, dateutil.parser.parserinfo(dayfirst=True))
             if pseudo_type == datetime.datetime:
-                return dt
+                return Plugin.default_datetime_parser(value)
             else:
-                return datetime.date(dt.year, dt.month, dt.day)
+                return Plugin.default_date_parser(value)
         else:
             # pseudo_type in [str, bool, int, float]:
             return pseudo_type(value)
@@ -813,7 +1000,7 @@ class Plugin(SeleniumLibrary.LibraryComponent):
         if locator is None:
             return "None"
         locator_desc = locator
-        if isinstance(locator, str) and locator.startswith(tuple(self.POM_LOCATOR_PREFIXES)):
+        if self.is_pom_locator(locator):
             node = self.get_node(self.remove_pom_prefix(locator))
             locator_desc = f"page: '{node.page_node.name}', full_name: '{node.full_name}', " \
                            f"real locator: '{node.locator}'"
