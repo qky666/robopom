@@ -21,18 +21,18 @@ import robopom.comparator
 web_element = SeleniumLibrary.locators.elementfinder.WebElement
 
 
-class Plugin(SeleniumLibrary.LibraryComponent):
+class RobopomPlugin(SeleniumLibrary.LibraryComponent):
     """
-    robopom.Plugin is a plugin for Robot Framework SeleniumLibrary that makes easier to adopt the
+    RobopomPlugin is a plugin for Robot Framework SeleniumLibrary that makes easier to adopt the
     Page Object Model (POM) methodology.
 
     It can be imported using something like this:
 
-    | Library | SeleniumLibrary | timeout=5 | plugins=robopom.Plugin, other_plugins.MyOtherPlugin |
+    | Library | SeleniumLibrary | timeout=5 | plugins=robopom.RobopomPlugin, other_plugins.MyOtherPlugin |
 
     If no other SeleniumLibrary plugins are used, it will be something like this:
 
-    | Library | SeleniumLibrary | timeout=5 | plugins=robopom.Plugin |
+    | Library | SeleniumLibrary | timeout=5 | plugins=robopom.RobopomPlugin |
 
     """
     built_in = robot.libraries.BuiltIn.BuiltIn()
@@ -43,7 +43,7 @@ class Plugin(SeleniumLibrary.LibraryComponent):
 
     @staticmethod
     def default_date_parser(value: str, dayfirst: bool = True) -> datetime.date:
-        dt = Plugin.default_datetime_parser(value, dayfirst=dayfirst)
+        dt = RobopomPlugin.default_datetime_parser(value, dayfirst=dayfirst)
         return datetime.date(dt.year, dt.month, dt.day)
 
     @staticmethod
@@ -61,7 +61,7 @@ class Plugin(SeleniumLibrary.LibraryComponent):
 
     @staticmethod
     def pseudo_boolean_as_bool(value) -> typing.Optional[bool]:
-        if Plugin.is_pseudo_boolean(value) is False:
+        if RobopomPlugin.is_pseudo_boolean(value) is False:
             return None
         return robopom.constants.PSEUDO_BOOLEAN[value]
 
@@ -76,7 +76,7 @@ class Plugin(SeleniumLibrary.LibraryComponent):
 
     @staticmethod
     def pseudo_type_as_type(value) -> typing.Optional[type]:
-        if Plugin.is_pseudo_type(value) is False:
+        if RobopomPlugin.is_pseudo_type(value) is False:
             return None
         if isinstance(value, str):
             value = value.casefold()
@@ -85,7 +85,7 @@ class Plugin(SeleniumLibrary.LibraryComponent):
     @staticmethod
     def remove_pom_prefix(path: str) -> str:
         """
-        It removes the `path prefix` (`path:` or `path=`) if the provided `path` starts with this prefix.
+        It removes the `pom prefix` (`pom:` or `pom=`) if the provided `path` starts with this prefix.
         Otherwise, it returns the same `path` string.
 
         :param path: The path string where we want to remove the prefix.
@@ -99,12 +99,14 @@ class Plugin(SeleniumLibrary.LibraryComponent):
 
     def __init__(self,
                  ctx: SeleniumLibrary,
-                 set_library_search_order_in_wait_until_loaded: bool = True,
+                 set_library_search_order: bool = True,
                  ) -> None:
         """
-        Initializes a new `RobopomSeleniumPlugin`. It it executed by the `SeleniumLibrary` itself.
+        Initializes a new `robopom.RobopomPlugin`. It it executed by the `SeleniumLibrary` itself.
 
         :param ctx: The SeleniumLibrary instance, provided by the SeleniumLibrary itself.
+        :param set_library_search_order: If True, robopom.RobopomPlugin will execute set_library_search_order keyword
+                                         when setting the active page (in set_active_page or wait_until_loaded).
         """
         self.pom_root = Node(name="", pom_root_for_plugin=self).resolve()
 
@@ -112,7 +114,7 @@ class Plugin(SeleniumLibrary.LibraryComponent):
         super().__init__(ctx)
         ctx.robopom_plugin = self
 
-        self.set_library_search_order = set_library_search_order_in_wait_until_loaded
+        self.set_library_search_order = set_library_search_order
 
         # Register Path Locator Strategy
         SeleniumLibrary.ElementKeywords(ctx).add_location_strategy(
@@ -123,14 +125,21 @@ class Plugin(SeleniumLibrary.LibraryComponent):
 
         self.active_page_name: typing.Optional[str] = None
 
+        self._selenium_library_name = None
+
     @SeleniumLibrary.base.keyword
     def set_active_page(self, page: [str, Node, Page]) -> None:
+        """
+        Sets the provided `page` as the active page.
+
+        Usually you will not need to call this as `wait_until_loaded` does it automatically.
+        """
         if isinstance(page, Node):
             assert page.is_page, f"Tried to set active page a Node that is not a Page: {page}"
             page = page.name
         elif isinstance(page, Page):
             page = page.real_name
-        self.active_page_name = page
+        self.active_page_name = self.remove_pom_prefix(page)
 
         if self.set_library_search_order:
             self.built_in.set_library_search_order(self.active_page_name)
@@ -150,22 +159,45 @@ class Plugin(SeleniumLibrary.LibraryComponent):
         return self.ctx
 
     def get_selenium_library_name(self) -> str:
-        all_libs: typing.Dict[str] = self.built_in.get_library_instance(all=True)
-        candidates = {name: lib for name, lib in all_libs.items() if lib == self.ctx}
-        assert len(candidates) == 1, \
-            f"Error in 'get_selenium_library_name'. There should be ony one library candidate, " \
-            f"but candidates are: {candidates}"
-        return list(candidates.keys())[0]
+        if self._selenium_library_name is None:
+            all_libs: typing.Dict[str] = self.built_in.get_library_instance(all=True)
+            candidates = {name: lib for name, lib in all_libs.items() if lib == self.ctx}
+            assert len(candidates) == 1, \
+                f"Error in 'get_selenium_library_name'. There should be ony one library candidate, " \
+                f"but candidates are: {candidates}"
+            self._selenium_library_name = list(candidates.keys())[0]
+        return self._selenium_library_name
 
     def wait_until(self,
                    timeout: typing.Union[str, int, float] = None,
                    expected: typing.Any = True,
                    raise_error: bool = True,
-                   error: str = None,
+                   custom_error: str = None,
                    poll: typing.Union[int, float] = 0.2,
                    executable: typing.Callable = None,
                    args: list = None,
                    kwargs: dict = None, ) -> bool:
+        """
+        Program execution waits until given condition.
+
+        The `executable` is run with `args` as positional arguments and `kwargs` as keyword arguments.
+        If the `executable` return value is `expected`, then this method returns `True`.
+
+        If `timeout` is reached, then generates an error (if `raise_error` is `True`) or the method returns `False`
+        (if `raise_error` is False).
+
+        If `custom_error` is provided, then this string is used as the error string.
+
+        :param timeout: Can be a Robot Framework time format (string), an integer or float (seconds).
+        :param expected: When executable returns the expected value, the method ends.
+        :param raise_error: Generate or not an error when timeout is reached.
+        :param custom_error: Custom error string.
+        :param poll: Time (in seconds) between executable calls.
+        :param executable: The function or method to run.
+        :param args: List of positional arguments for executable.
+        :param kwargs: Dictionary of keyword arguments for executable.
+        :return: True is condition is met. False (or error) if not.
+        """
         if timeout is None:
             timeout = self.selenium_library.timeout
         else:
@@ -185,10 +217,12 @@ class Plugin(SeleniumLibrary.LibraryComponent):
             value = executable(*args, **kwargs)
         else:
             # Condition not met
-            if error is None:
+            if custom_error is None:
                 error = f"Timeout ({timeout}) in 'wait_until': executable: {executable}, args: {args}, " \
                         f"kwargs: {kwargs}, expected: {expected}, raise_error: {raise_error}. " \
                         f"Last value obtained: {value}"
+            else:
+                error = custom_error
             if raise_error is True:
                 assert False, error
             else:
@@ -210,9 +244,9 @@ class Plugin(SeleniumLibrary.LibraryComponent):
     @SeleniumLibrary.base.keyword
     def pom_locator_strategy(self, parent, locator: str, tag, constraints) -> typing.List[web_element]:
         """
-        Keyword that defines the `Path Locator Strategy`.
+        Keyword that defines the `Pom Locator Strategy`.
 
-        Usually it is not necessary to run this keyword directly (it is used by the Robopom Plugin internally).
+        Usually it is not necessary to run this keyword directly (it is used by RobopomPlugin internally).
         """
         # Validation
         assert isinstance(parent, web_element) is False, \
@@ -251,14 +285,14 @@ class Plugin(SeleniumLibrary.LibraryComponent):
     @SeleniumLibrary.base.keyword
     def log_pom_tree(self) -> None:
         """
-        Writes the `model tree` to the log file.
+        Writes the `pom tree` to the log file.
         """
         self.info(self.pom_root.pom_tree)
 
     @SeleniumLibrary.base.keyword
     def exists_unique_node(self, name: str = None) -> bool:
         """
-        Returns `True` if component defined by `path` (string) exists, `False` otherwise.
+        Returns `True` if component defined by `name` (string) exists, `False` otherwise.
         """
         name = self.remove_pom_prefix(name)
         return self.pom_root.find_node(name) is not None
@@ -266,11 +300,28 @@ class Plugin(SeleniumLibrary.LibraryComponent):
     @SeleniumLibrary.base.keyword
     def get_node(self, name: str) -> Node:
         """
-        Returns the component obtained from `path`.
+        Returns the component obtained from `name`. If it does not exist, it generates an error.
 
-        If the component defined by path does not exist, it generates an error.
+        `name` can be several words separated by a space. This words are used to identify a unique node.
 
-        `path` (string): Path of the component. If path is `None`, returns the root component.
+        Example: name = `login_root login_form user`
+
+        First, a page node named `login_root` is searched.
+        If found, a unique node named `login_form` is searched in `login_root` node descendants.
+        If found, a unique node named `user` is searched in `login_form` node descendants.
+
+        Note: Nodes are searched in all descendants, not only direct children.
+
+        If this process does not give an unique node,
+        then the `active page` is used as the `root` os the search process:
+
+        A node named `login_root` is searched in the `active page`.
+        If found, a unique node named `login_form` is searched in `login_root` node descendants.
+        If found, a unique node named `user` is searched in `login_form` node descendants.
+
+        If this whole process does not give an unique node, it generates an error.
+
+        `name` (string): Name of the component.
         """
         name = self.remove_pom_prefix(name)
         node = self.pom_root.find_node(name)
@@ -836,7 +887,7 @@ class Plugin(SeleniumLibrary.LibraryComponent):
                 return bool(value)
         elif as_type == datetime.date:
             if isinstance(value, str):
-                return Plugin.default_date_parser(value)
+                return RobopomPlugin.default_date_parser(value)
             elif isinstance(value, (tuple, list, set)):
                 return datetime.date(*value)
             elif isinstance(value, dict):
@@ -845,7 +896,7 @@ class Plugin(SeleniumLibrary.LibraryComponent):
                 assert False, f"Do not know how to convert to Date: {value}"
         elif as_type == datetime.datetime:
             if isinstance(value, str):
-                return Plugin.default_datetime_parser(value)
+                return RobopomPlugin.default_datetime_parser(value)
             elif isinstance(value, (tuple, list, set)):
                 return datetime.datetime(*value)
             elif isinstance(value, dict):
@@ -1661,50 +1712,50 @@ class Plugin(SeleniumLibrary.LibraryComponent):
 
 
 # Documenting overrides
-Plugin.alert_should_be_present.__doc__ = SeleniumLibrary.AlertKeywords.alert_should_be_present.__doc__
-Plugin.alert_should_not_be_present.__doc__ = SeleniumLibrary.AlertKeywords.alert_should_not_be_present.__doc__
-Plugin.choose_file.__doc__ = SeleniumLibrary.FormElementKeywords.choose_file.__doc__
-Plugin.clear_element_text.__doc__ = SeleniumLibrary.ElementKeywords.clear_element_text.__doc__
-Plugin.click_button.__doc__ = SeleniumLibrary.ElementKeywords.click_button.__doc__
-Plugin.click_element.__doc__ = SeleniumLibrary.ElementKeywords.click_element.__doc__
-Plugin.click_element_at_coordinates.__doc__ = SeleniumLibrary.ElementKeywords.click_element_at_coordinates.__doc__
-Plugin.click_image.__doc__ = SeleniumLibrary.ElementKeywords.click_image.__doc__
-Plugin.click_link.__doc__ = SeleniumLibrary.ElementKeywords.click_link.__doc__
-Plugin.cover_element.__doc__ = SeleniumLibrary.ElementKeywords.cover_element.__doc__
-Plugin.double_click_element.__doc__ = SeleniumLibrary.ElementKeywords.double_click_element.__doc__
-Plugin.drag_and_drop.__doc__ = SeleniumLibrary.ElementKeywords.drag_and_drop.__doc__
-Plugin.drag_and_drop_by_offset.__doc__ = SeleniumLibrary.ElementKeywords.drag_and_drop_by_offset.__doc__
-Plugin.execute_async_javascript.__doc__ = SeleniumLibrary.JavaScriptKeywords.execute_async_javascript.__doc__
-Plugin.execute_javascript.__doc__ = SeleniumLibrary.JavaScriptKeywords.execute_javascript.__doc__
-Plugin.handle_alert.__doc__ = SeleniumLibrary.AlertKeywords.handle_alert.__doc__
-Plugin.input_password.__doc__ = SeleniumLibrary.FormElementKeywords.input_password.__doc__
-Plugin.input_text.__doc__ = SeleniumLibrary.FormElementKeywords.input_text.__doc__
-Plugin.input_text_into_alert.__doc__ = SeleniumLibrary.AlertKeywords.input_text_into_alert.__doc__
-Plugin.mouse_down.__doc__ = SeleniumLibrary.ElementKeywords.mouse_down.__doc__
-Plugin.mouse_down_on_image.__doc__ = SeleniumLibrary.ElementKeywords.mouse_down_on_image.__doc__
-Plugin.mouse_down_on_link.__doc__ = SeleniumLibrary.ElementKeywords.mouse_down_on_link.__doc__
-Plugin.mouse_out.__doc__ = SeleniumLibrary.ElementKeywords.mouse_out.__doc__
-Plugin.mouse_over.__doc__ = SeleniumLibrary.ElementKeywords.mouse_over.__doc__
-Plugin.mouse_up.__doc__ = SeleniumLibrary.ElementKeywords.mouse_up.__doc__
-Plugin.open_context_menu.__doc__ = SeleniumLibrary.ElementKeywords.open_context_menu.__doc__
-Plugin.press_keys.__doc__ = SeleniumLibrary.ElementKeywords.press_keys.__doc__
-Plugin.reload_page.__doc__ = SeleniumLibrary.BrowserManagementKeywords.reload_page.__doc__
-Plugin.scroll_element_into_view.__doc__ = SeleniumLibrary.ElementKeywords.scroll_element_into_view.__doc__
-Plugin.select_all_from_list.__doc__ = SeleniumLibrary.SelectElementKeywords.select_all_from_list.__doc__
-Plugin.select_checkbox.__doc__ = SeleniumLibrary.FormElementKeywords.select_checkbox.__doc__
-Plugin.select_from_list_by_index.__doc__ = SeleniumLibrary.SelectElementKeywords.select_from_list_by_index.__doc__
-Plugin.select_from_list_by_label.__doc__ = SeleniumLibrary.SelectElementKeywords.select_from_list_by_label.__doc__
-Plugin.select_from_list_by_value.__doc__ = SeleniumLibrary.SelectElementKeywords.select_from_list_by_value.__doc__
-Plugin.select_radio_button.__doc__ = SeleniumLibrary.ElementKeywords.press_keys.__doc__
-Plugin.simulate_event.__doc__ = SeleniumLibrary.ElementKeywords.simulate_event.__doc__
-Plugin.submit_form.__doc__ = SeleniumLibrary.FormElementKeywords.submit_form.__doc__
-Plugin.switch_browser.__doc__ = SeleniumLibrary.BrowserManagementKeywords.switch_browser.__doc__
-Plugin.switch_window.__doc__ = SeleniumLibrary.WindowKeywords.switch_window.__doc__
-Plugin.unselect_all_from_list.__doc__ = SeleniumLibrary.SelectElementKeywords.unselect_all_from_list.__doc__
-Plugin.unselect_checkbox.__doc__ = SeleniumLibrary.FormElementKeywords.unselect_checkbox.__doc__
-Plugin.unselect_from_list_by_index.__doc__ = SeleniumLibrary.SelectElementKeywords.unselect_from_list_by_index.__doc__
-Plugin.unselect_from_list_by_label.__doc__ = SeleniumLibrary.SelectElementKeywords.unselect_from_list_by_label.__doc__
-Plugin.unselect_from_list_by_value.__doc__ = SeleniumLibrary.SelectElementKeywords.unselect_from_list_by_value.__doc__
+RobopomPlugin.alert_should_be_present.__doc__ = SeleniumLibrary.AlertKeywords.alert_should_be_present.__doc__
+RobopomPlugin.alert_should_not_be_present.__doc__ = SeleniumLibrary.AlertKeywords.alert_should_not_be_present.__doc__
+RobopomPlugin.choose_file.__doc__ = SeleniumLibrary.FormElementKeywords.choose_file.__doc__
+RobopomPlugin.clear_element_text.__doc__ = SeleniumLibrary.ElementKeywords.clear_element_text.__doc__
+RobopomPlugin.click_button.__doc__ = SeleniumLibrary.ElementKeywords.click_button.__doc__
+RobopomPlugin.click_element.__doc__ = SeleniumLibrary.ElementKeywords.click_element.__doc__
+RobopomPlugin.click_element_at_coordinates.__doc__ = SeleniumLibrary.ElementKeywords.click_element_at_coordinates.__doc__
+RobopomPlugin.click_image.__doc__ = SeleniumLibrary.ElementKeywords.click_image.__doc__
+RobopomPlugin.click_link.__doc__ = SeleniumLibrary.ElementKeywords.click_link.__doc__
+RobopomPlugin.cover_element.__doc__ = SeleniumLibrary.ElementKeywords.cover_element.__doc__
+RobopomPlugin.double_click_element.__doc__ = SeleniumLibrary.ElementKeywords.double_click_element.__doc__
+RobopomPlugin.drag_and_drop.__doc__ = SeleniumLibrary.ElementKeywords.drag_and_drop.__doc__
+RobopomPlugin.drag_and_drop_by_offset.__doc__ = SeleniumLibrary.ElementKeywords.drag_and_drop_by_offset.__doc__
+RobopomPlugin.execute_async_javascript.__doc__ = SeleniumLibrary.JavaScriptKeywords.execute_async_javascript.__doc__
+RobopomPlugin.execute_javascript.__doc__ = SeleniumLibrary.JavaScriptKeywords.execute_javascript.__doc__
+RobopomPlugin.handle_alert.__doc__ = SeleniumLibrary.AlertKeywords.handle_alert.__doc__
+RobopomPlugin.input_password.__doc__ = SeleniumLibrary.FormElementKeywords.input_password.__doc__
+RobopomPlugin.input_text.__doc__ = SeleniumLibrary.FormElementKeywords.input_text.__doc__
+RobopomPlugin.input_text_into_alert.__doc__ = SeleniumLibrary.AlertKeywords.input_text_into_alert.__doc__
+RobopomPlugin.mouse_down.__doc__ = SeleniumLibrary.ElementKeywords.mouse_down.__doc__
+RobopomPlugin.mouse_down_on_image.__doc__ = SeleniumLibrary.ElementKeywords.mouse_down_on_image.__doc__
+RobopomPlugin.mouse_down_on_link.__doc__ = SeleniumLibrary.ElementKeywords.mouse_down_on_link.__doc__
+RobopomPlugin.mouse_out.__doc__ = SeleniumLibrary.ElementKeywords.mouse_out.__doc__
+RobopomPlugin.mouse_over.__doc__ = SeleniumLibrary.ElementKeywords.mouse_over.__doc__
+RobopomPlugin.mouse_up.__doc__ = SeleniumLibrary.ElementKeywords.mouse_up.__doc__
+RobopomPlugin.open_context_menu.__doc__ = SeleniumLibrary.ElementKeywords.open_context_menu.__doc__
+RobopomPlugin.press_keys.__doc__ = SeleniumLibrary.ElementKeywords.press_keys.__doc__
+RobopomPlugin.reload_page.__doc__ = SeleniumLibrary.BrowserManagementKeywords.reload_page.__doc__
+RobopomPlugin.scroll_element_into_view.__doc__ = SeleniumLibrary.ElementKeywords.scroll_element_into_view.__doc__
+RobopomPlugin.select_all_from_list.__doc__ = SeleniumLibrary.SelectElementKeywords.select_all_from_list.__doc__
+RobopomPlugin.select_checkbox.__doc__ = SeleniumLibrary.FormElementKeywords.select_checkbox.__doc__
+RobopomPlugin.select_from_list_by_index.__doc__ = SeleniumLibrary.SelectElementKeywords.select_from_list_by_index.__doc__
+RobopomPlugin.select_from_list_by_label.__doc__ = SeleniumLibrary.SelectElementKeywords.select_from_list_by_label.__doc__
+RobopomPlugin.select_from_list_by_value.__doc__ = SeleniumLibrary.SelectElementKeywords.select_from_list_by_value.__doc__
+RobopomPlugin.select_radio_button.__doc__ = SeleniumLibrary.ElementKeywords.press_keys.__doc__
+RobopomPlugin.simulate_event.__doc__ = SeleniumLibrary.ElementKeywords.simulate_event.__doc__
+RobopomPlugin.submit_form.__doc__ = SeleniumLibrary.FormElementKeywords.submit_form.__doc__
+RobopomPlugin.switch_browser.__doc__ = SeleniumLibrary.BrowserManagementKeywords.switch_browser.__doc__
+RobopomPlugin.switch_window.__doc__ = SeleniumLibrary.WindowKeywords.switch_window.__doc__
+RobopomPlugin.unselect_all_from_list.__doc__ = SeleniumLibrary.SelectElementKeywords.unselect_all_from_list.__doc__
+RobopomPlugin.unselect_checkbox.__doc__ = SeleniumLibrary.FormElementKeywords.unselect_checkbox.__doc__
+RobopomPlugin.unselect_from_list_by_index.__doc__ = SeleniumLibrary.SelectElementKeywords.unselect_from_list_by_index.__doc__
+RobopomPlugin.unselect_from_list_by_label.__doc__ = SeleniumLibrary.SelectElementKeywords.unselect_from_list_by_label.__doc__
+RobopomPlugin.unselect_from_list_by_value.__doc__ = SeleniumLibrary.SelectElementKeywords.unselect_from_list_by_value.__doc__
 
 
 class Node(anytree.AnyNode):
@@ -1731,7 +1782,7 @@ class Node(anytree.AnyNode):
                  template_args: typing.Any = None,
                  template_kwargs: dict = None,
                  # pom_root_for_plugin:
-                 pom_root_for_plugin: typing.Union[Plugin, str] = None,
+                 pom_root_for_plugin: typing.Union[RobopomPlugin, str] = None,
                  **kwargs) -> None:
         # Initial calculations and validations
         if children is None:
@@ -1799,7 +1850,7 @@ class Node(anytree.AnyNode):
         self.template: typing.Union[None, str, Node] = template
         self.template_args: list = template_args
         self.template_kwargs: dict = template_kwargs
-        self.pom_root_for_plugin: typing.Optional[Plugin] = pom_root_for_plugin
+        self.pom_root_for_plugin: typing.Optional[RobopomPlugin] = pom_root_for_plugin
         self._raw_isolated_pre_resolve: dict = _raw_isolated_pre_resolve
         self._multiple_nodes: typing.List[Node] = _multiple_nodes
         self._resolved: bool = _resolved
@@ -1874,21 +1925,21 @@ class Node(anytree.AnyNode):
         else:
             return self.parent.named_or_root_node
 
-    def get_plugin(self) -> typing.Optional[Plugin]:
+    def get_plugin(self) -> typing.Optional[RobopomPlugin]:
         if self.pom_root_for_plugin is not None:
             return self.pom_root_for_plugin
         if self.root.pom_root_for_plugin is not None:
             return self.root.pom_root_for_plugin
 
         # Try to guess.
-        built_in = Plugin.built_in
+        built_in = RobopomPlugin.built_in
         all_libs: dict = built_in.get_library_instance(all=True)
         selenium_libs: dict = {lib_name: lib_instance for lib_name, lib_instance in all_libs.items()
                                if isinstance(lib_instance, SeleniumLibrary.SeleniumLibrary)
                                and getattr(lib_instance, "robopom_plugin", None) is not None
-                               and isinstance(getattr(lib_instance, "robopom_plugin"), Plugin)}
+                               and isinstance(getattr(lib_instance, "robopom_plugin"), RobopomPlugin)}
         if len(selenium_libs) == 1:
-            # Maybe there is only one "Plugin" defined
+            # Maybe there is only one "RobopomPlugin" defined
             return getattr(list(selenium_libs.values())[0], "robopom_plugin")
 
         return None
@@ -1978,7 +2029,7 @@ class Node(anytree.AnyNode):
         return self.is_attached_to_pom_model and self.parent == self.root
 
     def get_page_library(self) -> Page:
-        return Plugin.built_in.get_library_instance(self.page_node.name)
+        return RobopomPlugin.built_in.get_library_instance(self.page_node.name)
 
     def get_selenium_library(self) -> SeleniumLibrary:
         return self.get_page_library().get_selenium_library()
@@ -2612,7 +2663,7 @@ class Page:
     def guess_selenium_library_name(cls) -> str:
         if cls.guessed_selenium_library_name is None:
             # Try to guess selenium_library_name
-            all_libs: typing.Dict[str] = Plugin.built_in.get_library_instance(all=True)
+            all_libs: typing.Dict[str] = RobopomPlugin.built_in.get_library_instance(all=True)
             candidates = {name: lib for name, lib in all_libs.items()
                           if isinstance(lib, SeleniumLibrary.SeleniumLibrary)}
             assert len(candidates) == 1, \
@@ -2792,9 +2843,9 @@ class Page:
 
         :return: The SeleniumLibrary instance.
         """
-        return Plugin.built_in.get_library_instance(self.selenium_library_name)
+        return RobopomPlugin.built_in.get_library_instance(self.selenium_library_name)
 
-    def get_robopom_plugin(self) -> Plugin:
+    def get_robopom_plugin(self) -> RobopomPlugin:
         """
         Returns the `RobopomSeleniumPlugin` been used.
 
@@ -2808,7 +2859,7 @@ class Page:
 
         :return: The parent page library object.
         """
-        return Plugin.built_in.get_library_instance(self.parent_page_name) \
+        return RobopomPlugin.built_in.get_library_instance(self.parent_page_name) \
             if self.parent_page_name is not None else None
 
     def parent_page_node(self) -> typing.Optional[Node]:
@@ -2840,7 +2891,7 @@ class Page:
 
         :return: List of names of all the ancestors pages.
         """
-        return [Plugin.built_in.get_library_instance(name) for name in self.ancestor_pages_names()]
+        return [RobopomPlugin.built_in.get_library_instance(name) for name in self.ancestor_pages_names()]
 
     @robot_deco.keyword
     def get_page_node(self) -> Node:
@@ -2856,7 +2907,7 @@ class Page:
 
         Parameter `path` can be a real path, or a `short`.
         """
-        name = Plugin.remove_pom_prefix(name)
+        name = RobopomPlugin.remove_pom_prefix(name)
         node = self.get_page_node().find_node(name)
         assert node is not None, f"Node '{name}' not found in page '{self.name}'"
         return node
@@ -3012,7 +3063,7 @@ class Page:
         if self.get_robopom_plugin().keyword_exists(over_keyword):
             run_args = list(args[:])
             run_args += [f"{key}={value}" for key, value in kwargs.items()]
-            return Plugin.built_in.run_keyword(over_keyword, *run_args)
+            return RobopomPlugin.built_in.run_keyword(over_keyword, *run_args)
         else:
             return method(*args, **kwargs)
 
@@ -3129,7 +3180,7 @@ class Page:
         for ancestor_page_name in self.ancestor_pages_names():
             ancestor_kw = f"{ancestor_page_name}.{robopom.constants.OVERRIDE_PREFIX} Init Page Nodes"
             if self.get_robopom_plugin().keyword_exists(ancestor_kw):
-                Plugin.built_in.run_keyword(ancestor_kw)
+                RobopomPlugin.built_in.run_keyword(ancestor_kw)
 
     def get_custom_get_set_keyword(self,
                                    element: typing.Union[Node, str],

@@ -1,6 +1,6 @@
 from __future__ import annotations
-import robopom.Plugin
+import robopom.RobopomPlugin
 
 
-class Page(robopom.Plugin.Page):
+class Page(robopom.RobopomPlugin.Page):
     pass

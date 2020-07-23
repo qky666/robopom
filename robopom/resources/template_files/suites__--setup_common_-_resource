@@ -1,5 +1,5 @@
 *** Settings ***
-Library     SeleniumLibrary    timeout=${TIMEOUT}    plugins=robopom.Plugin     run_on_failure=On Failure
+Library     SeleniumLibrary    timeout=${TIMEOUT}    plugins=robopom.RobopomPlugin     run_on_failure=On Failure
 # Library     DebugLibrary
 
 
