@@ -1,3 +1,5 @@
 USER: "valid.user@mtp.es"
 PASSWORD: "my_password"
 NAME: "Valid User"
+CAPACITY: "8.00"
+SIGNED_UP: "2012-09-17"

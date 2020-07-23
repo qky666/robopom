@@ -2,4 +2,4 @@
 children:
 - name: body
   locator: .//body
-  always_visible: true
+  wait_visible: true

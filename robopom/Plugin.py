@@ -16,7 +16,6 @@ import robot.api.deco as robot_deco
 import anytree.importer
 import yaml
 import robopom.constants
-# import robopom.model as model
 import robopom.comparator
 
 web_element = SeleniumLibrary.locators.elementfinder.WebElement
@@ -24,19 +23,17 @@ web_element = SeleniumLibrary.locators.elementfinder.WebElement
 
 class Plugin(SeleniumLibrary.LibraryComponent):
     """
-    RobopomSeleniumPlugin is a plugin for Robot Framework SeleniumLibrary that makes easier to adopt the
+    robopom.Plugin is a plugin for Robot Framework SeleniumLibrary that makes easier to adopt the
     Page Object Model (POM) methodology.
 
     It can be imported using something like this:
 
-    | Library | SeleniumLibrary | timeout=10 | plugins=robopom.Plugin, other_plugins.MyOtherPlugin |
+    | Library | SeleniumLibrary | timeout=5 | plugins=robopom.Plugin, other_plugins.MyOtherPlugin |
 
-    Here, `my_pages.resource` and `my_variables.yaml` are the paths of the `pages` file and `variables` file used in
-    Update Variables File keyword.
+    If no other SeleniumLibrary plugins are used, it will be something like this:
 
-    If the default values are ok for you (and you do not need any other SeleniumLibrary plugins), it can be simplified:
+    | Library | SeleniumLibrary | timeout=5 | plugins=robopom.Plugin |
 
-    | Library | SeleniumLibrary | timeout=10 | plugins=robopom.RobopomSeleniumPlugin |
     """
     built_in = robot.libraries.BuiltIn.BuiltIn()
 
@@ -2572,7 +2569,7 @@ class Page:
         return None
 
     def __init__(self,
-                 page_name: str,
+                 page_name: str = None,
                  parent_page_name: str = None,
                  selenium_library_name: str = None) -> None:
         """
@@ -2582,10 +2579,17 @@ class Page:
         :param selenium_library_name: Optional. Name given to the SeleniumLibrary when imported.
         """
         self.real_name = page_name
+
         # TODO: Posible bottomless pit
         self.override_name = None
 
         self.parent_page_name = parent_page_name
+        self.selenium_library_name = selenium_library_name
+
+        if page_name is None:
+            # Generating docs. Nothing to do
+            self.page_resource_file_path = None
+            return
 
         if selenium_library_name is None:
             self.selenium_library_name = self.guess_selenium_library_name()

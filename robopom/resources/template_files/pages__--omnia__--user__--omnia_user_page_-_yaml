@@ -1,26 +1,22 @@
 # name: omnia_user_page
 children:
   - locator: "div#main"
-    # name: main
-    always_visible: true
+    name: main
+    wait_visible: true
     children:
       - locator: ".//h2"
-        # name: name
-        short: name
-        always_visible: true
+        name: name
+        wait_visible: true
       - locator: "div.splitcontentleft"
         # name: left_content
-        always_visible: true
+        wait_visible: true
         children:
           - locator: ".//li[contains(text(),'Correo electrónico:')]//a"
-            # name: email
-            short: email
-            always_visible: true
+            name: email
+            wait_visible: true
           - locator: ".//li[contains(text(),'Capacidad Diaria: ')]"
-            # name: capacity
-            short: capacity
-            always_visible: true
+            name: capacity
+            wait_visible: true
           - locator: ".//li[contains(text(),'Inscrito el: ')]"
-            # name: signed_up
-            short: signed_up
-            always_visible: true
+            name: signed_up
+            wait_visible: true

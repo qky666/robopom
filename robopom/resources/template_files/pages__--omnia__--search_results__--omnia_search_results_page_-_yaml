@@ -1,14 +1,12 @@
 # name: omnia_search_results_page
 children:
   - locator: "div#main"
-    # name: main
-    always_visible: true
+    name: main
+    wait_visible: true
     children:
       - locator: ".//h2[contains(text(),'Búsqueda')]"
-        # name: search_title
-        short: search_title
-        always_visible: true
+        name: search_title
+        wait_visible: true
       - locator: "input#search-input"
-        # name: search_results
-        short: search_results
-        always_visible: true  
+        name: search_results
+        wait_visible: true

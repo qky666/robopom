@@ -1,26 +1,22 @@
 # name: omnia_main_page
 children:
   - locator: "div#top-menu"
-    # name: top_menu
-    always_visible: true
+    name: top_menu
+    wait_visible: true
     children:
       - locator: "div#loggedas a.user.active"
-        # name: loggedas
-        short: loggedas
-        always_visible: true
+        name: loggedas
+        wait_visible: true
       - locator: "div#account a.my-account"
-        # name: account
-        short: account
-        always_visible: true  
+        name: account
+        wait_visible: true
       - locator: a.logout
-        # name: logout
-        short: logout
-        always_visible: true
+        name: logout
+        wait_visible: true
   - locator: "div#header"
-    # name: header
-    always_visible: true
+    name: header
+    wait_visible: true
     children:
       - locator: "input#q"
-        # name: search
-        short: search
-        always_visible: true
+        name: search
+        wait_visible: true

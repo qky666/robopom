@@ -4,3 +4,4 @@
 --flattenkeywords TAG:flatten
 --variablefile variables_omnia.yaml
 --pythonpath .
+--listener robopom.listener
