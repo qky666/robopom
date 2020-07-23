@@ -1,74 +1,63 @@
 # name: mtp_page
 children:
-# Header
+  # Header
   - locator: div.custom-menu
-    # name: header_group
-    always_visible: true
+    name: header
+    wait_visible: true
     children:
       # Logo
       - locator: a.img-menu[href*='https://www.mtp.es'] img
         # name: mtp_logo
-        always_visible: true
+        wait_visible: true
       # Search
       - locator: .//li/*[contains(@class, 'search-menu')][not (contains(@class,'uk-hidden'))]//i[contains(@class,'uk-icon-search')]
-        # name: search_icon
-        short: search_icon
-        always_visible: true
+        name: search_icon
+        wait_visible: true
       - locator: form#search-menu input.search-field
-        # name: search_text
-        short: search_text
+        name: search_text
       - locator: form#search-menu button[type=submit] i.uk-icon-search
-        # name: search_button
-        short: search_button
+        name: search_button
       # Menu
-      - locator_generator: .//ul[contains(@class,'uk-navbar-nav')]/li/a[contains(@class,'principal-menu')][contains(text(),'{}')][@href='{}']
-        name: section_generator
-        always_visible: true
-      - generator: section_generator
-        # name: servicios
-        format_args:
+      - locator: .//ul[contains(@class,'uk-navbar-nav')]/li/a[contains(@class,'principal-menu')][contains(text(),'{}')][@href='{}']
+        name: section_template
+        # is_template: true
+        wait_visible: true
+      - template: section_template
+        name: servicios
+        template_args:
           - "SERVICIOS"
           - "#"
-      - generator: section_generator
-        # name: sectores
-        format_args:
+      - template: section_template
+        name: sectores
+        template_args:
           - "SECTORES"
           - ""
-      - generator: section_generator
-        # name: formacion
-        format_args:
+      - template: section_template
+        name: formacion
+        template_args:
           - "FORMACIÓN"
           - "https://www.mtp.es/formacion"
-      - generator: section_generator
-        # name: blog
-        format_args:
+      - template: section_template
+        name: blog
+        template_args:
           - "BLOG"
           - "https://www.mtp.es/blog"
-      - generator: section_generator
-        # name: talento
-        format_args:
+      - template: section_template
+        name: talento
+        template_args:
           - "TALENTO"
           - "https://www.mtp.es/talento"
-      - generator: section_generator
-        # name: sobre_mtp
-        format_args:
+      - template: section_template
+        name: sobre_mtp
+        template_args:
           - "SOBRE MTP"
           - "https://www.mtp.es/sobre-mtp"
-      - generator: section_generator
-        # name: contacto
-        format_args:
+      - template: section_template
+        name: contacto
+        template_args:
           - "CONTACTO"
           - "https://www.mtp.es/contacto"
 
   # This is how to import components from other files
   - name: imported
-    import_file: pages/other/test_component.yaml
-    import_path: body
-
-# Possible type_component:
-# PageObject,
-# PageElement,
-# PageElements,
-# PageElementGenerator,
-# PageElementGeneratorInstance,
-# PageElementFrame
+    template: test_component body

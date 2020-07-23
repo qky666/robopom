@@ -2,8 +2,8 @@
 children:
   - locator: div#beans-content
     # name: search_results
-    always_visible: true
+    wait_visible: true
     children:
-      - locator_generator: .//*[contains(text(),'{}')]
-        # name: result_text_generator
-        short: result_text_generator
+      - locator: .//*[contains(text(),'{}')]
+        name: result_text_template
+        # is_template: true

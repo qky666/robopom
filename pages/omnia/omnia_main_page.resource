@@ -1,11 +1,9 @@
 *** Settings ***
-Resource          ../../robopom.resource
-Library           robopom.RobopomPage          page_file_path=pages/omnia/omnia_main_page    WITH NAME    omnia_main_page
+Library     robopom.Page    page_name=omnia_main_page   WITH NAME   omnia_main_page
 
 
 *** Keywords ***
 Set search
-    [Arguments]             ${value}=${None}
-    Return From Keyword If  $value is None
-    Input Text              ${OMNIA_MAIN_PAGE__SEARCH}  ${value}
-    Press Keys              ${OMNIA_MAIN_PAGE__SEARCH}  RETURN
+    [Arguments]     ${value}
+    Input Text      pom:header search      ${value}
+    Press Keys      pom:header search      RETURN

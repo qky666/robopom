@@ -1,66 +1,145 @@
+from __future__ import annotations
 import typing
-from . import model
+import re
 
 
 def equals(value: typing.Any, expected: typing.Any) -> bool:
     return value == expected
 
 
+def equals_ignore_case(value: typing.Any, expected: typing.Any) -> bool:
+    return str(value).casefold() == str(expected).casefold()
+
+
+def value_greater_than_expected(value: typing.Any, expected: typing.Any) -> bool:
+    return value > expected
+
+
+def value_greater_or_equal_than_expected(value: typing.Any, expected: typing.Any) -> bool:
+    return value >= expected
+
+
+def value_lower_than_expected(value: typing.Any, expected: typing.Any) -> bool:
+    return value < expected
+
+
+def value_lower_or_equal_than_expected(value: typing.Any, expected: typing.Any) -> bool:
+    return value >= expected
+
+
+def value_in_expected(value: typing.Any, expected: typing.Any) -> bool:
+    return value in expected
+
+
+def value_not_in_expected(value: typing.Any, expected: typing.Any) -> bool:
+    return value not in expected
+
+
+def expected_in_value(value: typing.Any, expected: typing.Any) -> bool:
+    return expected in value
+
+
+def expected_not_in_value(value: typing.Any, expected: typing.Any) -> bool:
+    return expected not in value
+
+
+def value_len_equals(value: typing.Any, expected: typing.Any) -> bool:
+    return len(value) == expected
+
+
+def value_len_greater_than_expected(value: typing.Any, expected: typing.Any) -> bool:
+    return len(value) > expected
+
+
+def value_len_greater_or_equal_than_expected(value: typing.Any, expected: typing.Any) -> bool:
+    return len(value) >= expected
+
+
+def value_len_lower_than_expected(value: typing.Any, expected: typing.Any) -> bool:
+    return len(value) < expected
+
+
+def value_len_lower_or_equal_than_expected(value: typing.Any, expected: typing.Any) -> bool:
+    return len(value) <= expected
+
+
+def value_matches_regular_expression(value: typing.Any, expected: typing.Any) -> bool:
+    return re.search(expected, value) is not None
+
+
 class Comparator:
+
     COMPARATOR_FUNCTIONS: typing.Dict[str, typing.Callable[[typing.Any, typing.Any], bool]] = {
-        "equals": equals,
+        "equals".casefold(): equals,
+        "==": equals,
+        "=": equals,
+
+        "equals_ignore_case".casefold(): equals_ignore_case,
+        "equals ignore case".casefold(): equals_ignore_case,
+        "=(ignore_case)".casefold(): equals_ignore_case,
+        "==(ignore_case)".casefold(): equals_ignore_case,
+        "=(ignore case)".casefold(): equals_ignore_case,
+        "==(ignore case)".casefold(): equals_ignore_case,
+
+        "value_greater_than_expected".casefold(): value_greater_than_expected,
+        "value greater than expected".casefold(): value_greater_than_expected,
+        ">".casefold(): value_greater_than_expected,
+
+        "value_greater_or_equal_than_expected".casefold(): value_greater_than_expected,
+        "value greater or equal than expected".casefold(): value_greater_than_expected,
+        ">=".casefold(): value_greater_than_expected,
+
+        "value_lower_than_expected".casefold(): value_lower_than_expected,
+        "value lower than expected".casefold(): value_lower_than_expected,
+        ">".casefold(): value_lower_than_expected,
+
+        "value_lower_or_equal_than_expected".casefold(): value_lower_than_expected,
+        "value lower or equal than expected".casefold(): value_lower_than_expected,
+        ">=".casefold(): value_lower_than_expected,
+
+        "value_in_expected".casefold(): value_in_expected,
+        "value in expected".casefold(): value_in_expected,
+
+        "value_not_in_expected".casefold(): value_not_in_expected,
+        "value not in expected".casefold(): value_not_in_expected,
+
+        "expected_in_value".casefold(): expected_in_value,
+        "expected in value".casefold(): expected_in_value,
+
+        "expected_not_in_value".casefold(): expected_not_in_value,
+        "expected not in value".casefold(): expected_not_in_value,
+
+        "value_len_equals".casefold(): value_len_equals,
+        "value len equals".casefold(): value_len_equals,
+        "len(value) == expected".casefold(): value_len_equals,
+
+        "value_len_greater_than_expected".casefold(): value_len_greater_than_expected,
+        "value len greater than expected".casefold(): value_len_greater_than_expected,
+        "len(value) > expected".casefold(): value_len_greater_than_expected,
+
+        "value_len_greater_or_equal_than_expected".casefold(): value_len_greater_or_equal_than_expected,
+        "value len greater or equal than expected".casefold(): value_len_greater_or_equal_than_expected,
+        "len(value) >= expected".casefold(): value_len_greater_or_equal_than_expected,
+
+        "value_len_lower_than_expected".casefold(): value_len_lower_than_expected,
+        "value len lower than expected".casefold(): value_len_lower_than_expected,
+        "len(value) < expected".casefold(): value_len_lower_than_expected,
+
+        "value_len_lower_or_equal_than_expected".casefold(): value_len_lower_or_equal_than_expected,
+        "value len lower or equal than expected".casefold(): value_len_lower_or_equal_than_expected,
+        "len(value) <= expected".casefold(): value_len_lower_or_equal_than_expected,
+
+        "value_matches_regular_expression".casefold(): value_matches_regular_expression,
+        "value matches regular expression".casefold(): value_matches_regular_expression,
+        "regexp".casefold(): value_matches_regular_expression,
     }
 
     @staticmethod
-    def compare_using(value: typing.Any,
-                      expected: typing.Any,
-                      comparator: typing.Union[str,
-                                               typing.Callable[[typing.Any, typing.Any], bool]] = "equals",
-                      ) -> bool:
+    def compare(value: typing.Any,
+                expected: typing.Any,
+                comparator: typing.Union[str,
+                                         typing.Callable[[typing.Any, typing.Any], bool]] = equals,
+                ) -> bool:
         if isinstance(comparator, str):
-            comparator = Comparator.COMPARATOR_FUNCTIONS[comparator]
+            comparator = Comparator.COMPARATOR_FUNCTIONS[comparator.casefold()]
         return comparator(value, expected)
-
-    @staticmethod
-    def compare_field_value_using(node: model.Node,
-                                  expected: typing.Any,
-                                  comparator: typing.Union[str,
-                                                           typing.Callable[
-                                                               [typing.Any, typing.Any], bool]] = "equals",
-                                  compare_as: str = None,
-                                  **kwargs,
-                                  ) -> bool:
-        if compare_as is None:
-            value = node.get_field_value(**kwargs)
-        elif compare_as.casefold() in [t.casefold for t in ["String", "str"]]:
-            value = node.get_field_value_as_string(**kwargs)
-        elif compare_as.casefold() in [t.casefold for t in ["Integer", "int"]]:
-            value = node.get_field_value_as_integer(**kwargs)
-        elif compare_as.casefold() in [t.casefold for t in ["Float"]]:
-            value = node.get_field_value_as_float(**kwargs)
-        elif compare_as.casefold() in [t.casefold for t in ["Boolean", "bool"]]:
-            value = node.get_field_value_as_boolean(**kwargs)
-        elif compare_as.casefold() in [t.casefold for t in ["Date"]]:
-            value = node.get_field_value_as_date(**kwargs)
-        elif compare_as.casefold() in [t.casefold for t in ["Datetime"]]:
-            value = node.get_field_value_as_datetime(**kwargs)
-        else:
-            assert False, f"'compare_as' not valid: {compare_as}"
-
-        return Comparator.compare_using(value, expected, comparator)
-
-    def __init__(self, compare_function: typing.Callable[[typing.Any, typing.Any], bool] = None):
-        if compare_function is None:
-            compare_function = equals
-        self.compare_function = compare_function
-
-    def compare(self, value: typing.Any, expected: typing.Any) -> bool:
-        return self.compare_using(value, expected, self.compare_function)
-
-    def compare_field_value(self,
-                            node: model.Node,
-                            expected: typing.Any,
-                            compare_as: str = None,
-                            **kwargs,
-                            ) -> bool:
-        return self.compare_field_value_using(node, expected, self.compare_function, compare_as, **kwargs)

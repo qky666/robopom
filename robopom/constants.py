@@ -1,10 +1,9 @@
+import datetime
+
 # General
 # CORE_PREFIX = "Core"  # This constant is "implicitly used" only. Leave it here as a reminder.
 
-# Conversions
-TRUE = [value.casefold() for value in ["True", "Yes"]],
-FALSE = [value.casefold() for value in ["False", "No"]]
-ALMOST_NONE = [None, {}, []]
+DEFAULT_SELENIUM_LIBRARY_NAME = "SeleniumLibrary"
 
 # Project template.
 # Files used in project template.
@@ -58,48 +57,48 @@ RESOURCES_PACKAGE = "robopom.resources"
 # Template files folder name.
 TEMPLATE_FILES_DIR_NAME = "template_files"
 
-# Roles
-ROLE_TEXT = "text"
-ROLE_PASSWORD = "password"
-ROLE_SELECT = "select"
-ROLE_CHECKBOX = "checkbox"
+# Pom prefix
+POM_PREFIX = "pom"
+POM_LOCATOR_PREFIXES = [f"{POM_PREFIX}:", f"{POM_PREFIX}="]
 
-# Get/Set
-GET_SET_SEPARATOR = ":"
-SET_TEXT_PREFIX = "set_text"
-GET_TEXT_PREFIX = "get_text"
-SET_PASSWORD_PREFIX = "set_password"
-GET_PASSWORD_PREFIX = "get_password"
-SET_SELECT_PREFIX = "set_select"
-GET_SELECT_PREFIX = "get_select"
-SET_CHECKBOX_PREFIX = "set_checkbox"
-GET_CHECKBOX_PREFIX = "get_checkbox"
-SET_PREFIX = "set"
-GET_PREFIX = "get"
-ACTION_PREFIX = "action"
-ACTION_CLICK = "click"
-ACTION_DOUBLE_CLICK = "double_click"
-ACTION_CONTEXT_CLICK = "context_click"
-ASSERT_EQUALS_PREFIX = "assert_equals"
-ASSERT_NOT_EQUALS_PREFIX = "assert_not_equals"
-ASSERT_EQUALS_IGNORE_CASE_PREFIX = "assert_equals_ignore_case"
-ASSERT_NOT_EQUALS_IGNORE_CASE_PREFIX = "assert_not_equals_ignore_case"
-ASSERT_VALUE_GREATER_THAN_EXPECTED_PREFIX = "assert_value_greater_than_expected"
-ASSERT_VALUE_GREATER_OR_EQUAL_THAN_EXPECTED_PREFIX = "assert_value_greater_or_equal_than_expected"
-ASSERT_VALUE_LOWER_THAN_EXPECTED_PREFIX = "assert_value_lower_than_expected"
-ASSERT_VALUE_LOWER_OR_EQUAL_THAN_EXPECTED_PREFIX = "assert_value_lower_or_equal_than_expected"
-ASSERT_VALUE_IN_EXPECTED_PREFIX = "assert_value_in_expected"
-ASSERT_VALUE_NOT_IN_EXPECTED_PREFIX = "assert_value_not_in_expected"
-ASSERT_EXPECTED_IN_VALUE_PREFIX = "assert_expected_in_value"
-ASSERT_EXPECTED_NOT_IN_VALUE_PREFIX = "assert_expected_not_in_value"
-ASSERT_VALUE_LEN_EQUALS_PREFIX = "assert_value_len_equals"
-ASSERT_VALUE_LEN_NOT_EQUALS_PREFIX = "assert_value_len_not_equals"
-ASSERT_VALUE_LEN_GREATER_THAN_EXPECTED_PREFIX = "assert_value_len_greater_than_expected"
-ASSERT_VALUE_LEN_GREATER_OR_EQUAL_THAN_EXPECTED_PREFIX = "assert_value_len_greater_or_equal_than_expected"
-ASSERT_VALUE_LEN_LOWER_THAN_EXPECTED_PREFIX = "assert_value_len_lower_than_expected"
-ASSERT_VALUE_LEN_LOWER_OR_EQUAL_THAN_EXPECTED_PREFIX = "assert_value_len_lower_or_equal_than_expected"
-ASSERT_VALUE_MATCHES_REGULAR_EXPRESSION_PREFIX = "assert_value_matches_regular_expression"
-ASSERT_VALUE_NOT_MATCHES_REGULAR_EXPRESSION_PREFIX = "assert_value_not_matches_regular_expression"
+# Page keywords
+OVERRIDE_PREFIX = "Override"
+CORE_PREFIX = "Core"
+SUPER_PREFIX = "Super"
+YAML_EXTENSIONS = [".yaml", ".yml"]
+FROM_KEYWORD = ("from", "keyword")
 
-GET_ACTIONS_PREFIXES = (GET_TEXT_PREFIX, GET_PASSWORD_PREFIX, GET_SELECT_PREFIX, GET_CHECKBOX_PREFIX, GET_PREFIX)
+# Types and conversions
+TYPES = {
+    str: str,
+    "str".casefold(): str,
+    "string".casefold(): str,
 
+    bool: bool,
+    "bool".casefold(): bool,
+    "boolean".casefold(): bool,
+
+    int: int,
+    "int".casefold(): int,
+    "integer".casefold(): int,
+
+    float: float,
+    "float".casefold(): float,
+
+    datetime.date: datetime.date,
+    "date".casefold(): datetime.date,
+
+    datetime.datetime: datetime.datetime,
+    "datetime".casefold(): datetime.datetime,
+}
+
+PSEUDO_BOOLEAN = {
+    True: True,
+    "True".casefold(): True,
+    "Yes".casefold(): True,
+    1: True,
+    False: False,
+    "False".casefold(): False,
+    "No".casefold(): False,
+    0: False,
+}

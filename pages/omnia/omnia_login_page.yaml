@@ -2,17 +2,14 @@
 children:
   - locator: "div#login-form"
     # name: login_form
-    always_visible: true
+    wait_visible: true
     children:
       - locator: "input#username"
-        # name: username
-        short: username
-        always_visible: true
+        name: username
+        wait_visible: true
       - locator: "input#password"
-        # name: password
-        short: password
-        always_visible: true
+        name: password
+        wait_visible: true
       - locator: "input[type=submit]"
-        # name: submit
-        short: submit
-        always_visible: true
+        name: submit
+        wait_visible: true

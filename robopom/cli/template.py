@@ -1,3 +1,4 @@
+from __future__ import annotations
 import click
 import robopom.cli.cli as cli
 

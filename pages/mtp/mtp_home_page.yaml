@@ -2,7 +2,7 @@
 children:
   - locator: .//h1[text()='MTP es el aseguramiento integral']
     # name: conoce_mtp
-    always_visible: true
-  - locator_generator: .//p[contains(text(),'{}')]
-    # name: paragraph_generator
-    short: paragraph_generator
+    wait_visible: true
+  - locator: .//p[contains(text(),'{}')]
+    name: paragraph_template
+    # is_template: true

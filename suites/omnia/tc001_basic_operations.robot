@@ -1,49 +1,57 @@
 *** Settings ***
-Documentation     Omnia tests
-Resource          ../../robopom_pages.resource
+Documentation   Omnia tests
+Resource        setup_omnia.resource
+Test Setup      Setup Browser
+Test Teardown   Close All Browsers
+
 
 *** Variables ***
 ${USER}             firstname.lastname@mtp.es       # Override this variable!
 ${PASSWORD}         Password                        # Override this variable!
 ${NAME}             Firsname Lastname               # Override this variable!
-${CAPACITY}         8.00
-${SIGNED_UP}        2012-09-17
+${CAPACITY}         8.00                            # Override this variable!
+${SIGNED_UP}        2012-09-17                      # Override this variable!
 
 
-** Test Cases ***    
+*** Test Cases ***
 Omnia. TC001. Operaciones básicas en Omnia
     omnia_login_page.Wait Until Loaded
-    Perform     ${OMNIA_LOGIN_PAGE__USERNAME}               ${USER}
-    ...         ${OMNIA_LOGIN_PAGE__PASSWORD}               ${PASSWORD}
-    ...         ${OMNIA_LOGIN_PAGE__SUBMIT}                 ${ACTION_CLICK}
+    Set Field Value   pom:username   ${USER}
+    Set Field Value   pom:password   ${PASSWORD}
+    Click Element     pom:submit
+
     omnia_main_page.Wait Until Loaded
-    Perform     ${OMNIA_MAIN_PAGE__LOGGEDAS}                  ${ASSERT_EQUALS}${USER}
-    ...         ${OMNIA_MAIN_PAGE__LOGGEDAS}                  ${ACTION_CLICK}
+    Wait Until Field Value Satisfies   pom:loggedas   expected_value=${USER}
+    Click Element     pom:loggedas
+
     omnia_user_page.Wait Until Loaded
     ${search}   Generate Random String
     ${search}   Catenate    My random search    ${search}
-    Perform     ${OMNIA_USER_PAGE__NAME}                          ${ASSERT_EQUALS}${NAME}
-    ...         ${OMNIA_USER_PAGE__EMAIL}           ${ASSERT_EQUALS}${USER}
-    ...         ${OMNIA_USER_PAGE__CAPACITY}        ${ASSERT_EQUALS}${CAPACITY}
-    ...         ${OMNIA_USER_PAGE__SIGNED_UP}       ${ASSERT_EQUALS}${SIGNED_UP}
-    ...         ${OMNIA_USER_PAGE__SEARCH}                      ${search}
+    Wait Until Field Value Satisfies   pom:name        expected_value=${NAME}
+    Wait Until Field Value Satisfies   pom:email       expected_value=${USER}
+    Wait Until Field Value Satisfies   pom:capacity    expected_value=${CAPACITY}
+    Wait Until Field Value Satisfies   pom:signed_up   expected_value=${SIGNED_UP}
+    Set Field Value    pom:search    ${search}
+
     omnia_search_results_page.Wait Until Loaded
-    Perform     ${OMNIA_SEARCH_RESULTS_PAGE__SEARCH_RESULTS}      ${ASSERT_EQUALS}${search}
-    ...         ${OMNIA_SEARCH_RESULTS_PAGE__ACCOUNT}         ${ACTION_CLICK}
-    omnia_account_page.Wait Until Loaded    
-    Perform     ${OMNIA_ACCOUNT_PAGE__LOGGEDAS}                              ${ASSERT_EQUALS}${USER}
-    ...         ${OMNIA_ACCOUNT_PAGE__FIRSTNAME}                   ${ASSERT_VALUE_IN_EXPECTED}${NAME}
-    ...         ${OMNIA_ACCOUNT_PAGE__FIRSTNAME}                   Frodo
-    ...         ${OMNIA_ACCOUNT_PAGE__LASTNAME}                    Bolsón
-    ...         ${OMNIA_ACCOUNT_PAGE__MAIL}                        frodo.bolson@mtp.es
-    ...         ${OMNIA_ACCOUNT_PAGE__LANGUAGE}                    English
-    ...         ${OMNIA_ACCOUNT_PAGE__MAIL_NOTIFICATION}          Sin eventos
-    ...         ${OMNIA_ACCOUNT_PAGE__NO_SELF_NOTIFIED}           ${False}
-    ...         ${OMNIA_ACCOUNT_PAGE__HIDE_MAIL}                  ${True}
-    ...         ${OMNIA_ACCOUNT_PAGE__TIME_ZONE}                  (GMT+00:00) London
-    ...         ${OMNIA_ACCOUNT_PAGE__COMMENTS}                   En orden cronológico inverso
-    ...         ${OMNIA_ACCOUNT_PAGE__WARN_ON_LEAVING_UNSAVED}    ${False}
-    ...         ${OMNIA_ACCOUNT_PAGE__LOGOUT}                                ${ACTION_CLICK}
+    Wait Until Field Value Satisfies   pom:search_results    expected_value=${search}
+    Click Element   pom:account
+
+    omnia_account_page.Wait Until Loaded
+    Wait Until Field Value Satisfies   pom:loggedas    expected_value=${USER}
+    Wait Until Field Value Satisfies   pom:firstname   expected_value=${NAME}   compare_function=Value In Expected
+    Set Field Value     pom:firstname                  Frodo
+    Set Field Value     pom:lastname                   Bolsón
+    Set Field Value     pom:mail                       frodo.bolson@mtp.es
+    Set Field Value     pom:language                   English
+    Set Field Value     pom:mail_notification          Sin eventos
+    Set Field Value     pom:no_self_notified           ${False}
+    Set Field Value     pom:hide_mail                  ${True}
+    Set Field Value     pom:time_zone                  (GMT+00:00) London
+    Set Field Value     pom:comments                   En orden cronológico inverso
+    Set Field Value     pom:warn_on_leaving_unsaved    ${False}
+    Click Element       pom:logout
+
     omnia_login_page.Wait Until Loaded
 
     

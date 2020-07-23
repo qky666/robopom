@@ -1,66 +1,55 @@
 # name: omnia_account_page
 children:
   - locator: "div#main"
-    # name: main
-    always_visible: true
+    name: main
+    wait_visible: true
     children:
       - locator: ".//h2[contains(text(),'Mi cuenta')]"
-        always_visible: true
+        wait_visible: true
       - locator: "div.splitcontentleft"
         # name: left_content
-        always_visible: true  
+        wait_visible: true  
         children:
           - locator: "input#user_firstname"
-            # name: firstname
-            short: firstname
-            always_visible: true
+            name: firstname
+            wait_visible: true
           - locator: "input#user_lastname"
-            # name: lastname
-            short: lastname
-            always_visible: true
+            name: lastname
+            wait_visible: true
           - locator: "input#user_mail"
-            # name: mail
-            short: mail
-            always_visible: true
+            name: mail
+            wait_visible: true
           - locator: "select#user_language"
-            # name: language
-            short: language
-            always_visible: true
+            name: language
+            wait_visible: true
       - locator: "div.splitcontentright"
         # name: right_content
-        always_visible: true  
+        wait_visible: true  
         children:
           - locator: "select#user_mail_notification"
-            # name: mail_notification
-            short: mail_notification
-            always_visible: true
+            name: mail_notification
+            wait_visible: true
           - locator: "input#pref_no_self_notified"
-            # name: no_self_notified
-            short: no_self_notified
-            always_visible: true
+            name: no_self_notified
+            wait_visible: true
           - locator: "input#pref_hide_mail"
-            # name: hide_mail
-            short: hide_mail
-            always_visible: true
+            name: hide_mail
+            wait_visible: true
           - locator: "select#pref_time_zone"
-            # name: time_zone
-            short: time_zone
-            always_visible: true
+            name: time_zone
+            wait_visible: true
           - locator: "select#pref_comments_sorting"
-            # name: comments
-            short: comments
-            always_visible: true
+            name: comments
+            wait_visible: true
           - locator: "input#pref_warn_on_leaving_unsaved"
-            # name: warn_on_leaving_unsaved
-            short: warn_on_leaving_unsaved
-            always_visible: true
+            name: warn_on_leaving_unsaved
+            wait_visible: true
       - locator: "div#sidebar"
-        # name: sidebar
-        always_visible: true  
+        name: sidebar
+        wait_visible: true  
         children:
           - locator: ".//h3[text()='Mi cuenta']"
-            always_visible: true
+            wait_visible: true
           - locator: "a.user.active"
-            # name: active_user
-            short: active_user
-            always_visible: true
+            name: active_user
+            wait_visible: true

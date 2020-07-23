@@ -130,9 +130,9 @@ dmypy.json
 
 # Robot Framework
 geckodriver*.log
-log.html
-output.xml
-report.html
+output/log.html
+output/output.xml
+output/report.html
 output
 /libspecs/
 red.xml
