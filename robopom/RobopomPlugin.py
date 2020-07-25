@@ -315,7 +315,7 @@ class RobopomPlugin(SeleniumLibrary.LibraryComponent):
         If this process does not give an unique node,
         then the `active page` is used as the `root` os the search process:
 
-        A node named `login_root` is searched in the `active page`.
+        A unique node named `login_root` is searched in the `active page`.
         If found, a unique node named `login_form` is searched in `login_root` node descendants.
         If found, a unique node named `user` is searched in `login_form` node descendants.
 
@@ -349,7 +349,30 @@ class RobopomPlugin(SeleniumLibrary.LibraryComponent):
                         template_args: typing.Any = None,
                         template_kwargs: dict = None,
                         **kwargs) -> Node:
+        """
+        Creates and returns a new node.
 
+        `name` (string): Optional. Name of the node. Default value: None.
+        `locator` (string): Optional. SeleniumLibrary locator of the node. Default value: None.
+        `is_multiple` (bool): Optional. If False, the node represents a single SeleniumLibrary web_element
+                              defined by locator.
+                              If True, the node represents multiple SeleniumLibrary web_elements defined by locator.
+                              Default value: False
+        `order` (int): Optional. If locator returns more than one web_element, the index (0-based) of the web_element
+                       that this node represents. Default value: None.
+        `wait_present` (bool):
+        :param wait_visible:
+        :param wait_enabled:
+        :param wait_selected:
+        :param html_parent:
+        :param smart_pick:
+        :param is_template:
+        :param template:
+        :param template_args:
+        :param template_kwargs:
+        :param kwargs:
+        :return:
+        """
         return Node(name=name,
                     locator=locator,
                     is_multiple=is_multiple,
