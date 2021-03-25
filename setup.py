@@ -32,7 +32,7 @@ setuptools.setup(
     install_requires=['robotframework==3.1.2',
                       'robotframework-seleniumlibrary==4.3.0',
                       'anytree==2.8.0',
-                      'pyyaml==5.3.1',
+                      'pyyaml==5.4',
                       'robotframework-lint==1.0',
                       'click==7.1.1', ],
     entry_points={
